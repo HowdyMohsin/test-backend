@@ -1,0 +1,43 @@
+[project]
+name = "quickimgconvert-api"
+version = "2.1.0"
+description = "QuickImgConvert v2 conversion backend (FastAPI)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.29",
+    "alembic>=1.13",
+    "python-multipart>=0.0.9",
+    "pyvips>=2.2",
+    "rawpy>=0.20",
+    "pypdfium2>=4.30",
+    "psd-tools>=1.9",
+    "Pillow>=10.3",
+    "numpy>=1.26",
+    "firebase-admin>=6.5",
+    "argon2-cffi>=23.1",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = ["ruff>=0.4", "mypy>=1.10"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B", "C4", "DTZ", "RUF"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
+
+[tool.alembic]
+script_location = "migrations"

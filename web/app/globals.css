@@ -1,0 +1,103 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Design tokens (guide section 2). ALL colors live here as CSS variables.
+ * No hex color may appear inside any component.
+ */
+:root {
+  --background: 248 250 252; /* slate-50 */
+  --surface: 255 255 255; /* white cards */
+  --surface-raised: 241 245 249; /* slate-100 */
+  --border: 226 232 240; /* slate-200 */
+  --text: 15 23 42; /* slate-900 */
+  --text-muted: 100 116 139; /* slate-500 */
+  --primary: 30 64 175; /* #1e40af blue-800 */
+  --primary-hover: 29 78 216; /* #1d4ed8 blue-700 */
+  --primary-contrast: 255 255 255;
+  --accent: 59 130 246; /* #3b82f6 blue-500 */
+  --success: 22 163 74; /* #16a34a */
+  --warning: 217 119 6; /* #d97706 */
+  --danger: 220 38 38; /* #dc2626 */
+  --ring: 59 130 246;
+  color-scheme: light;
+}
+
+.dark {
+  --background: 2 6 23; /* slate-950 */
+  --surface: 15 23 42; /* slate-900 */
+  --surface-raised: 30 41 59; /* slate-800 */
+  --border: 30 41 59; /* slate-800 */
+  --text: 241 245 249; /* slate-100 */
+  --text-muted: 148 163 184; /* slate-400 */
+  --primary: 59 130 246; /* blue-500 pops on dark */
+  --primary-hover: 96 165 250; /* blue-400 */
+  --primary-contrast: 255 255 255;
+  --accent: 96 165 250; /* blue-400 */
+  --success: 34 197 94;
+  --warning: 245 158 11;
+  --danger: 248 113 113;
+  --ring: 96 165 250;
+  color-scheme: dark;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-background text-text antialiased;
+  }
+  ::selection {
+    background: rgb(var(--accent) / 0.25);
+  }
+}
+
+/* LEGACY TOKENS — only app/convert/[pair] uses these until its P6 rebuild. */
+:root {
+  --legacy-ink: 10 10 15;
+  --legacy-paper: 245 245 244;
+  --legacy-mist: 161 161 170;
+  --legacy-acid: 190 242 100;
+  --legacy-iris: 139 124 255;
+  --legacy-line: 39 39 42;
+  --legacy-panel: 19 19 22;
+}
+
+/* Thin scrollbars for the file list */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--border)) transparent;
+}
+.scroll-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: rgb(var(--border));
+  border-radius: 9999px;
+}
+
+/* Marquee for the format ticker */
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.animate-marquee {
+  animation: marquee 40s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee {
+    animation: none;
+  }
+}
+
+/* Before/after compare slider */
+.compare-range {
+  @apply absolute inset-0 h-full w-full cursor-ew-resize opacity-0;
+}

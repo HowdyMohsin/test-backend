@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: qic
+      POSTGRES_PASSWORD: qic_secret
+      POSTGRES_DB: qic
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # db is NOT published to the host (spec 2: only on the docker network)
+
+  api:
+    build: ./api
+    restart: unless-stopped
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: dev
+      ROLE: both
+      DATABASE_URL: postgresql+asyncpg://qic:qic_secret@db:5432/qic
+      DATA_DIR: /data
+      FIREBASE_PROJECT_ID: quick-img-convert
+      HMAC_SECRET: ${HMAC_SECRET:-change-me-to-a-long-random-string}
+      CORS_ORIGINS: http://localhost:3000,http://localhost:3001
+      WORKER_COUNT: 4
+    volumes:
+      - qicdata:/data
+      # real sample files for selfcheck (RAW/PSD/HEIC) — mount read-only
+      - ./api/data/samples:/code/data/samples:ro
+
+volumes:
+  pgdata:
+  qicdata:

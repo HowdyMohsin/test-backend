@@ -1,0 +1,2608 @@
+{
+  "version": "2.1.0",
+  "pair_count": 210,
+  "categories": [
+    {
+      "id": "image",
+      "formats": [
+        "jpg",
+        "png",
+        "webp",
+        "avif",
+        "gif",
+        "tiff",
+        "heic",
+        "svg",
+        "psd",
+        "pdf",
+        "cr2",
+        "nef",
+        "arw",
+        "dng",
+        "rw2",
+        "orf",
+        "pef",
+        "raf"
+      ]
+    },
+    {
+      "id": "audio",
+      "formats": [
+        "mp3",
+        "wav",
+        "flac",
+        "aac",
+        "ogg",
+        "m4a",
+        "opus",
+        "aiff"
+      ]
+    },
+    {
+      "id": "video",
+      "formats": [
+        "mp4",
+        "mov",
+        "mkv",
+        "avi",
+        "webm",
+        "wmv"
+      ]
+    }
+  ],
+  "formats": [
+    {
+      "slug": "jpg",
+      "name": "JPG",
+      "category": "image",
+      "subgroup": null,
+      "extensions": [
+        "jpg",
+        "jpeg"
+      ],
+      "mime": "image/jpeg",
+      "flags": [
+        "lossy"
+      ],
+      "reader": "vips",
+      "writer": "vips",
+      "output_settings": [
+        {
+          "key": "quality",
+          "label": "Quality",
+          "type": "range",
+          "default": 85,
+          "min": 1,
+          "max": 100,
+          "options": [],
+          "help": "Higher = bigger file, better look"
+        },
+        {
+          "key": "background",
+          "label": "Background color",
+          "type": "color",
+          "default": "#ffffff",
+          "min": null,
+          "max": null,
+          "options": [],
+          "help": "Used when the source has transparency"
+        },
+        {
+          "key": "strip_metadata",
+          "label": "Remove metadata (EXIF)",
+          "type": "boolean",
+          "default": false,
+          "min": null,
+          "max": null,
+          "options": [],
+          "help": ""
+        },
+        {
+          "key": "progressive",
+          "label": "Progressive JPEG",
+          "type": "boolean",
+          "default": false,
+          "min": null,
+          "max": null,
+          "options": [],
+          "help": ""
+        }
+      ]
+    },
+    {
+      "slug": "png",
+      "name": "PNG",
+      "category": "image",
+      "subgroup": null,
+      "extensions": [
+        "png"
+      ],
+      "mime": "image/png",
+      "flags": [
+        "alpha"
+      ],
+      "reader": "vips",
+      "writer": "vips",
+      "output_settings": [
+        {
+          "key": "compression",
+          "label": "Compression level",
+          "type": "range",
+          "default": 6,
+          "min": 0,
+          "max": 9,
+          "options": [],
+          "help": "Higher = smaller file, slower"
+        },
+        {
+          "key": "strip_metadata",
+          "label": "Remove metadata",
+          "type": "boolean",
+          "default": false,
+          "min": null,
+          "max": null,
+          "options": [],
+          "help": ""
+        }
+      ]
+    },
+    {
+      "slug": "webp",
+      "name": "WebP",
+      "category": "image",
+      "subgroup": null,
+      "extensions": [
+        "webp"
+      ],
+      "mime": "image/webp",
+      "flags": [
+        "lossy",
+        "alpha",
+        "animated"
+      ],
+      "reader": "vips",
+      "writer": "vips",
+      "output_settings": [
+        {
+          "key": "quality",
+          "label": "Quality",
+          "type": "range",
+          "default": 85,
+          "min": 1,
+          "max": 100,
+          "options": [],
+          "help": ""
+        },
+        {
+          "key": "lossless",
+          "label": "Lossless mode",
+          "type": "boolean",
+          "default": false,
+          "min": null,
+          "max": null,
+          "options": [],
+          "help": ""
+        },
+        {
+          "key": "strip_metadata",
+          "label": "Remove metadata",
+          "type": "boolean",
+          "default": false,
+          "min": null,
+          "max": null,
+          "options": [],
+          "help": ""
+        }
+      ]
+    },
+    {
+      "slug": "avif",
+      "name": "AVIF",
+      "category": "image",
+      "subgroup": null,
+      "extensions": [
+        "avif"
+      ],
+      "mime": "image/avif",
+      "flags": [
+        "lossy",
+        "alpha",
+        "animated"
+      ],
+      "reader": "vips",
+      "writer": "vips",
+      "output_settings": [
+        {
+          "key": "quality",
+          "label": "Quality",
+          "type": "range",
+          "default": 80,
+          "min": 1,
+          "max": 100,
+          "options": [],
+          "help": ""
+        },
+        {
+          "key": "strip_metadata",
+          "label": "Remove metadata",
+          "type": "boolean",
+          "default": false,
+          "min": null,
+          "max": null,
+          "options": [],
+          "help": ""
+        }
+      ]
+    },
+    {
+      "slug": "gif",
+      "name": "GIF",
+      "category": "image",
+      "subgroup": null,
+      "extensions": [
+        "gif"
+      ],
+      "mime": "image/gif",
+      "flags": [
+        "alpha",
+        "animated"
+      ],
+      "reader": "vips",
+      "writer": "vips",
+      "output_settings": [
+        {
+          "key": "fps",
+          "label": "Frames per second",
+          "type": "range",
+          "default": 15,
+          "min": 1,
+          "max": 30,
+          "options": [],
+          "help": "Only for video sources"
+        },
+        {
+          "key": "width",
+          "label": "Max width (px)",
+          "type": "range",
+          "default": 480,
+          "min": 64,
+          "max": 1920,
+          "options": [],
+          "help": "Only for video sources, keeps aspect ratio"
+        }
+      ]
+    },
+    {
+      "slug": "tiff",
+      "name": "TIFF",
+      "category": "image",
+      "subgroup": null,
+      "extensions": [
+        "tif",
+        "tiff"
+      ],
+      "mime": "image/tiff",
+      "flags": [
+        "alpha",
+        "multipage"
+      ],
+      "reader": "vips",
+      "writer": "vips",
+      "output_settings": [
+        {
+          "key": "compression",
+          "label": "Compression",
+          "type": "select",
+          "default": "lzw",
+          "min": null,
+          "max": null,
+          "options": [
+            "lzw",
+            "deflate",
+            "zip",
+            "none"
+          ],
+          "help": ""
+        },
+        {
+          "key": "strip_metadata",
+          "label": "Remove metadata",
+          "type": "boolean",
+          "default": false,
+          "min": null,
+          "max": null,
+          "options": [],
+          "help": ""
+        }
+      ]
+    },
+    {
+      "slug": "heic",
+      "name": "HEIC",
+      "category": "image",
+      "subgroup": null,
+      "extensions": [
+        "heic",
+        "heif"
+      ],
+      "mime": "image/heic",
+      "flags": [
+        "lossy",
+        "alpha"
+      ],
+      "reader": "vips",
+      "writer": null,
+      "output_settings": []
+    },
+    {
+      "slug": "svg",
+      "name": "SVG",
+      "category": "image",
+      "subgroup": null,
+      "extensions": [
+        "svg"
+      ],
+      "mime": "image/svg+xml",
+      "flags": [
+        "vector"
+      ],
+      "reader": "svg",
+      "writer": "trace",
+      "output_settings": [
+        {
+          "key": "color_mode",
+          "label": "Trace mode",
+          "type": "select",
+          "default": "color",
+          "min": null,
+          "max": null,
+          "options": [
+            "color",
+            "binary"
+          ],
+          "help": "How the raster is vectorized"
+        },
+        {
+          "key": "max_size",
+          "label": "Max input size (px)",
+          "type": "range",
+          "default": 2048,
+          "min": 256,
+          "max": 4096,
+          "options": [],
+          "help": "Larger input = slower trace"
+        }
+      ]
+    },
+    {
+      "slug": "psd",
+      "name": "PSD",
+      "category": "image",
+      "subgroup": null,
+      "extensions": [
+        "psd"
+      ],
+      "mime": "image/vnd.adobe.photoshop",
+      "flags": [
+        "alpha"
+      ],
+      "reader": "psd",
+      "writer": null,
+      "output_settings": []
+    },
+    {
+      "slug": "pdf",
+      "name": "PDF",
+      "category": "image",
+      "subgroup": null,
+      "extensions": [
+        "pdf"
+      ],
+      "mime": "application/pdf",
+      "flags": [
+        "vector",
+        "multipage"
+      ],
+      "reader": "pdf",
+      "writer": null,
+      "output_settings": []
+    },
+    {
+      "slug": "cr2",
+      "name": "CR2 (Canon RAW)",
+      "category": "image",
+      "subgroup": "raw",
+      "extensions": [
+        "cr2"
+      ],
+      "mime": "image/x-canon-cr2",
+      "flags": [],
+      "reader": "raw",
+      "writer": null,
+      "output_settings": []
+    },
+    {
+      "slug": "nef",
+      "name": "NEF (Nikon RAW)",
+      "category": "image",
+      "subgroup": "raw",
+      "extensions": [
+        "nef"
+      ],
+      "mime": "image/x-nikon-nef",
+      "flags": [],
+      "reader": "raw",
+      "writer": null,
+      "output_settings": []
+    },
+    {
+      "slug": "arw",
+      "name": "ARW (Sony RAW)",
+      "category": "image",
+      "subgroup": "raw",
+      "extensions": [
+        "arw"
+      ],
+      "mime": "image/x-sony-arw",
+      "flags": [],
+      "reader": "raw",
+      "writer": null,
+      "output_settings": []
+    },
+    {
+      "slug": "dng",
+      "name": "DNG (Adobe RAW)",
+      "category": "image",
+      "subgroup": "raw",
+      "extensions": [
+        "dng"
+      ],
+      "mime": "image/x-adobe-dng",
+      "flags": [],
+      "reader": "raw",
+      "writer": null,
+      "output_settings": []
+    },
+    {
+      "slug": "rw2",
+      "name": "RW2 (Panasonic RAW)",
+      "category": "image",
+      "subgroup": "raw",
+      "extensions": [
+        "rw2"
+      ],
+      "mime": "image/x-panasonic-rw2",
+      "flags": [],
+      "reader": "raw",
+      "writer": null,
+      "output_settings": []
+    },
+    {
+      "slug": "orf",
+      "name": "ORF (Olympus RAW)",
+      "category": "image",
+      "subgroup": "raw",
+      "extensions": [
+        "orf"
+      ],
+      "mime": "image/x-olympus-orf",
+      "flags": [],
+      "reader": "raw",
+      "writer": null,
+      "output_settings": []
+    },
+    {
+      "slug": "pef",
+      "name": "PEF (Pentax RAW)",
+      "category": "image",
+      "subgroup": "raw",
+      "extensions": [
+        "pef"
+      ],
+      "mime": "image/x-pentax-pef",
+      "flags": [],
+      "reader": "raw",
+      "writer": null,
+      "output_settings": []
+    },
+    {
+      "slug": "raf",
+      "name": "RAF (Fujifilm RAW)",
+      "category": "image",
+      "subgroup": "raw",
+      "extensions": [
+        "raf"
+      ],
+      "mime": "image/x-fujifilm-raf",
+      "flags": [],
+      "reader": "raw",
+      "writer": null,
+      "output_settings": []
+    },
+    {
+      "slug": "mp3",
+      "name": "MP3",
+      "category": "audio",
+      "subgroup": null,
+      "extensions": [
+        "mp3"
+      ],
+      "mime": "audio/mpeg",
+      "flags": [
+        "lossy"
+      ],
+      "reader": "ffmpeg",
+      "writer": "ffmpeg",
+      "output_settings": [
+        {
+          "key": "bitrate",
+          "label": "Bitrate",
+          "type": "select",
+          "default": "192k",
+          "min": null,
+          "max": null,
+          "options": [
+            "128k",
+            "192k",
+            "256k",
+            "320k"
+          ],
+          "help": ""
+        }
+      ]
+    },
+    {
+      "slug": "wav",
+      "name": "WAV",
+      "category": "audio",
+      "subgroup": null,
+      "extensions": [
+        "wav"
+      ],
+      "mime": "audio/wav",
+      "flags": [],
+      "reader": "ffmpeg",
+      "writer": "ffmpeg",
+      "output_settings": [
+        {
+          "key": "bit_depth",
+          "label": "Bit depth",
+          "type": "select",
+          "default": "16",
+          "min": null,
+          "max": null,
+          "options": [
+            "16",
+            "24"
+          ],
+          "help": ""
+        }
+      ]
+    },
+    {
+      "slug": "flac",
+      "name": "FLAC",
+      "category": "audio",
+      "subgroup": null,
+      "extensions": [
+        "flac"
+      ],
+      "mime": "audio/flac",
+      "flags": [],
+      "reader": "ffmpeg",
+      "writer": "ffmpeg",
+      "output_settings": [
+        {
+          "key": "compression",
+          "label": "Compression level",
+          "type": "range",
+          "default": 5,
+          "min": 0,
+          "max": 8,
+          "options": [],
+          "help": ""
+        }
+      ]
+    },
+    {
+      "slug": "aac",
+      "name": "AAC",
+      "category": "audio",
+      "subgroup": null,
+      "extensions": [
+        "aac"
+      ],
+      "mime": "audio/aac",
+      "flags": [
+        "lossy"
+      ],
+      "reader": "ffmpeg",
+      "writer": "ffmpeg",
+      "output_settings": [
+        {
+          "key": "bitrate",
+          "label": "Bitrate",
+          "type": "select",
+          "default": "192k",
+          "min": null,
+          "max": null,
+          "options": [
+            "128k",
+            "192k",
+            "256k"
+          ],
+          "help": ""
+        }
+      ]
+    },
+    {
+      "slug": "ogg",
+      "name": "OGG",
+      "category": "audio",
+      "subgroup": null,
+      "extensions": [
+        "ogg"
+      ],
+      "mime": "audio/ogg",
+      "flags": [
+        "lossy"
+      ],
+      "reader": "ffmpeg",
+      "writer": "ffmpeg",
+      "output_settings": [
+        {
+          "key": "quality",
+          "label": "Quality",
+          "type": "range",
+          "default": 6,
+          "min": 0,
+          "max": 10,
+          "options": [],
+          "help": "Vorbis quality scale"
+        }
+      ]
+    },
+    {
+      "slug": "m4a",
+      "name": "M4A",
+      "category": "audio",
+      "subgroup": null,
+      "extensions": [
+        "m4a"
+      ],
+      "mime": "audio/mp4",
+      "flags": [
+        "lossy"
+      ],
+      "reader": "ffmpeg",
+      "writer": "ffmpeg",
+      "output_settings": [
+        {
+          "key": "bitrate",
+          "label": "Bitrate",
+          "type": "select",
+          "default": "192k",
+          "min": null,
+          "max": null,
+          "options": [
+            "128k",
+            "192k",
+            "256k"
+          ],
+          "help": ""
+        }
+      ]
+    },
+    {
+      "slug": "opus",
+      "name": "OPUS",
+      "category": "audio",
+      "subgroup": null,
+      "extensions": [
+        "opus"
+      ],
+      "mime": "audio/opus",
+      "flags": [
+        "lossy"
+      ],
+      "reader": "ffmpeg",
+      "writer": "ffmpeg",
+      "output_settings": [
+        {
+          "key": "bitrate",
+          "label": "Bitrate",
+          "type": "select",
+          "default": "128k",
+          "min": null,
+          "max": null,
+          "options": [
+            "64k",
+            "96k",
+            "128k",
+            "192k"
+          ],
+          "help": ""
+        }
+      ]
+    },
+    {
+      "slug": "aiff",
+      "name": "AIFF",
+      "category": "audio",
+      "subgroup": null,
+      "extensions": [
+        "aif",
+        "aiff"
+      ],
+      "mime": "audio/aiff",
+      "flags": [],
+      "reader": "ffmpeg",
+      "writer": "ffmpeg",
+      "output_settings": [
+        {
+          "key": "bit_depth",
+          "label": "Bit depth",
+          "type": "select",
+          "default": "16",
+          "min": null,
+          "max": null,
+          "options": [
+            "16",
+            "24"
+          ],
+          "help": ""
+        }
+      ]
+    },
+    {
+      "slug": "mp4",
+      "name": "MP4",
+      "category": "video",
+      "subgroup": null,
+      "extensions": [
+        "mp4"
+      ],
+      "mime": "video/mp4",
+      "flags": [],
+      "reader": "ffmpeg",
+      "writer": "ffmpeg",
+      "output_settings": [
+        {
+          "key": "crf",
+          "label": "Quality (CRF)",
+          "type": "range",
+          "default": 23,
+          "min": 18,
+          "max": 30,
+          "options": [],
+          "help": "Lower = better quality, bigger file"
+        },
+        {
+          "key": "preset",
+          "label": "Speed preset",
+          "type": "select",
+          "default": "medium",
+          "min": null,
+          "max": null,
+          "options": [
+            "ultrafast",
+            "superfast",
+            "veryfast",
+            "faster",
+            "fast",
+            "medium",
+            "slow"
+          ],
+          "help": ""
+        },
+        {
+          "key": "width",
+          "label": "Width (px, 0 = keep)",
+          "type": "range",
+          "default": 0,
+          "min": 0,
+          "max": 3840,
+          "options": [],
+          "help": ""
+        },
+        {
+          "key": "fps",
+          "label": "FPS (0 = keep)",
+          "type": "range",
+          "default": 0,
+          "min": 0,
+          "max": 120,
+          "options": [],
+          "help": ""
+        }
+      ]
+    },
+    {
+      "slug": "mov",
+      "name": "MOV",
+      "category": "video",
+      "subgroup": null,
+      "extensions": [
+        "mov"
+      ],
+      "mime": "video/quicktime",
+      "flags": [],
+      "reader": "ffmpeg",
+      "writer": "ffmpeg",
+      "output_settings": [
+        {
+          "key": "crf",
+          "label": "Quality (CRF)",
+          "type": "range",
+          "default": 23,
+          "min": 18,
+          "max": 30,
+          "options": [],
+          "help": "Lower = better quality, bigger file"
+        },
+        {
+          "key": "preset",
+          "label": "Speed preset",
+          "type": "select",
+          "default": "medium",
+          "min": null,
+          "max": null,
+          "options": [
+            "ultrafast",
+            "superfast",
+            "veryfast",
+            "faster",
+            "fast",
+            "medium",
+            "slow"
+          ],
+          "help": ""
+        },
+        {
+          "key": "width",
+          "label": "Width (px, 0 = keep)",
+          "type": "range",
+          "default": 0,
+          "min": 0,
+          "max": 3840,
+          "options": [],
+          "help": ""
+        },
+        {
+          "key": "fps",
+          "label": "FPS (0 = keep)",
+          "type": "range",
+          "default": 0,
+          "min": 0,
+          "max": 120,
+          "options": [],
+          "help": ""
+        }
+      ]
+    },
+    {
+      "slug": "mkv",
+      "name": "MKV",
+      "category": "video",
+      "subgroup": null,
+      "extensions": [
+        "mkv"
+      ],
+      "mime": "video/x-matroska",
+      "flags": [],
+      "reader": "ffmpeg",
+      "writer": "ffmpeg",
+      "output_settings": [
+        {
+          "key": "crf",
+          "label": "Quality (CRF)",
+          "type": "range",
+          "default": 23,
+          "min": 18,
+          "max": 30,
+          "options": [],
+          "help": "Lower = better quality, bigger file"
+        },
+        {
+          "key": "preset",
+          "label": "Speed preset",
+          "type": "select",
+          "default": "medium",
+          "min": null,
+          "max": null,
+          "options": [
+            "ultrafast",
+            "superfast",
+            "veryfast",
+            "faster",
+            "fast",
+            "medium",
+            "slow"
+          ],
+          "help": ""
+        },
+        {
+          "key": "width",
+          "label": "Width (px, 0 = keep)",
+          "type": "range",
+          "default": 0,
+          "min": 0,
+          "max": 3840,
+          "options": [],
+          "help": ""
+        },
+        {
+          "key": "fps",
+          "label": "FPS (0 = keep)",
+          "type": "range",
+          "default": 0,
+          "min": 0,
+          "max": 120,
+          "options": [],
+          "help": ""
+        }
+      ]
+    },
+    {
+      "slug": "avi",
+      "name": "AVI",
+      "category": "video",
+      "subgroup": null,
+      "extensions": [
+        "avi"
+      ],
+      "mime": "video/x-msvideo",
+      "flags": [],
+      "reader": "ffmpeg",
+      "writer": "ffmpeg",
+      "output_settings": [
+        {
+          "key": "crf",
+          "label": "Quality (CRF)",
+          "type": "range",
+          "default": 23,
+          "min": 18,
+          "max": 30,
+          "options": [],
+          "help": "Lower = better quality, bigger file"
+        },
+        {
+          "key": "preset",
+          "label": "Speed preset",
+          "type": "select",
+          "default": "medium",
+          "min": null,
+          "max": null,
+          "options": [
+            "ultrafast",
+            "superfast",
+            "veryfast",
+            "faster",
+            "fast",
+            "medium",
+            "slow"
+          ],
+          "help": ""
+        },
+        {
+          "key": "width",
+          "label": "Width (px, 0 = keep)",
+          "type": "range",
+          "default": 0,
+          "min": 0,
+          "max": 3840,
+          "options": [],
+          "help": ""
+        },
+        {
+          "key": "fps",
+          "label": "FPS (0 = keep)",
+          "type": "range",
+          "default": 0,
+          "min": 0,
+          "max": 120,
+          "options": [],
+          "help": ""
+        }
+      ]
+    },
+    {
+      "slug": "webm",
+      "name": "WebM",
+      "category": "video",
+      "subgroup": null,
+      "extensions": [
+        "webm"
+      ],
+      "mime": "video/webm",
+      "flags": [],
+      "reader": "ffmpeg",
+      "writer": "ffmpeg",
+      "output_settings": [
+        {
+          "key": "crf",
+          "label": "Quality (CRF)",
+          "type": "range",
+          "default": 23,
+          "min": 18,
+          "max": 30,
+          "options": [],
+          "help": "Lower = better quality, bigger file"
+        },
+        {
+          "key": "preset",
+          "label": "Speed preset",
+          "type": "select",
+          "default": "medium",
+          "min": null,
+          "max": null,
+          "options": [
+            "ultrafast",
+            "superfast",
+            "veryfast",
+            "faster",
+            "fast",
+            "medium",
+            "slow"
+          ],
+          "help": ""
+        },
+        {
+          "key": "width",
+          "label": "Width (px, 0 = keep)",
+          "type": "range",
+          "default": 0,
+          "min": 0,
+          "max": 3840,
+          "options": [],
+          "help": ""
+        },
+        {
+          "key": "fps",
+          "label": "FPS (0 = keep)",
+          "type": "range",
+          "default": 0,
+          "min": 0,
+          "max": 120,
+          "options": [],
+          "help": ""
+        }
+      ]
+    },
+    {
+      "slug": "wmv",
+      "name": "WMV",
+      "category": "video",
+      "subgroup": null,
+      "extensions": [
+        "wmv"
+      ],
+      "mime": "video/x-ms-wmv",
+      "flags": [],
+      "reader": "ffmpeg",
+      "writer": "ffmpeg",
+      "output_settings": [
+        {
+          "key": "crf",
+          "label": "Quality (CRF)",
+          "type": "range",
+          "default": 23,
+          "min": 18,
+          "max": 30,
+          "options": [],
+          "help": "Lower = better quality, bigger file"
+        },
+        {
+          "key": "preset",
+          "label": "Speed preset",
+          "type": "select",
+          "default": "medium",
+          "min": null,
+          "max": null,
+          "options": [
+            "ultrafast",
+            "superfast",
+            "veryfast",
+            "faster",
+            "fast",
+            "medium",
+            "slow"
+          ],
+          "help": ""
+        },
+        {
+          "key": "width",
+          "label": "Width (px, 0 = keep)",
+          "type": "range",
+          "default": 0,
+          "min": 0,
+          "max": 3840,
+          "options": [],
+          "help": ""
+        },
+        {
+          "key": "fps",
+          "label": "FPS (0 = keep)",
+          "type": "range",
+          "default": 0,
+          "min": 0,
+          "max": 120,
+          "options": [],
+          "help": ""
+        }
+      ]
+    }
+  ],
+  "pairs": [
+    {
+      "slug": "jpg-to-png",
+      "from": "jpg",
+      "to": "png",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "jpg-to-webp",
+      "from": "jpg",
+      "to": "webp",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "jpg-to-avif",
+      "from": "jpg",
+      "to": "avif",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "jpg-to-gif",
+      "from": "jpg",
+      "to": "gif",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "jpg-to-tiff",
+      "from": "jpg",
+      "to": "tiff",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "jpg-to-svg",
+      "from": "jpg",
+      "to": "svg",
+      "label": "Vectorized (traced)",
+      "engine": "trace"
+    },
+    {
+      "slug": "png-to-jpg",
+      "from": "png",
+      "to": "jpg",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "png-to-webp",
+      "from": "png",
+      "to": "webp",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "png-to-avif",
+      "from": "png",
+      "to": "avif",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "png-to-gif",
+      "from": "png",
+      "to": "gif",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "png-to-tiff",
+      "from": "png",
+      "to": "tiff",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "png-to-svg",
+      "from": "png",
+      "to": "svg",
+      "label": "Vectorized (traced)",
+      "engine": "trace"
+    },
+    {
+      "slug": "webp-to-jpg",
+      "from": "webp",
+      "to": "jpg",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "webp-to-png",
+      "from": "webp",
+      "to": "png",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "webp-to-avif",
+      "from": "webp",
+      "to": "avif",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "webp-to-gif",
+      "from": "webp",
+      "to": "gif",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "webp-to-tiff",
+      "from": "webp",
+      "to": "tiff",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "webp-to-svg",
+      "from": "webp",
+      "to": "svg",
+      "label": "Vectorized (traced)",
+      "engine": "trace"
+    },
+    {
+      "slug": "avif-to-jpg",
+      "from": "avif",
+      "to": "jpg",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "avif-to-png",
+      "from": "avif",
+      "to": "png",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "avif-to-webp",
+      "from": "avif",
+      "to": "webp",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "avif-to-gif",
+      "from": "avif",
+      "to": "gif",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "avif-to-tiff",
+      "from": "avif",
+      "to": "tiff",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "avif-to-svg",
+      "from": "avif",
+      "to": "svg",
+      "label": "Vectorized (traced)",
+      "engine": "trace"
+    },
+    {
+      "slug": "gif-to-jpg",
+      "from": "gif",
+      "to": "jpg",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "gif-to-png",
+      "from": "gif",
+      "to": "png",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "gif-to-webp",
+      "from": "gif",
+      "to": "webp",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "gif-to-avif",
+      "from": "gif",
+      "to": "avif",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "gif-to-tiff",
+      "from": "gif",
+      "to": "tiff",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "gif-to-svg",
+      "from": "gif",
+      "to": "svg",
+      "label": "Vectorized (traced)",
+      "engine": "trace"
+    },
+    {
+      "slug": "tiff-to-jpg",
+      "from": "tiff",
+      "to": "jpg",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "tiff-to-png",
+      "from": "tiff",
+      "to": "png",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "tiff-to-webp",
+      "from": "tiff",
+      "to": "webp",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "tiff-to-avif",
+      "from": "tiff",
+      "to": "avif",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "tiff-to-gif",
+      "from": "tiff",
+      "to": "gif",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "tiff-to-svg",
+      "from": "tiff",
+      "to": "svg",
+      "label": "Vectorized (traced)",
+      "engine": "trace"
+    },
+    {
+      "slug": "heic-to-jpg",
+      "from": "heic",
+      "to": "jpg",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "heic-to-png",
+      "from": "heic",
+      "to": "png",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "heic-to-webp",
+      "from": "heic",
+      "to": "webp",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "heic-to-avif",
+      "from": "heic",
+      "to": "avif",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "heic-to-tiff",
+      "from": "heic",
+      "to": "tiff",
+      "label": null,
+      "engine": "vips"
+    },
+    {
+      "slug": "svg-to-jpg",
+      "from": "svg",
+      "to": "jpg",
+      "label": null,
+      "engine": "svg"
+    },
+    {
+      "slug": "svg-to-png",
+      "from": "svg",
+      "to": "png",
+      "label": null,
+      "engine": "svg"
+    },
+    {
+      "slug": "svg-to-webp",
+      "from": "svg",
+      "to": "webp",
+      "label": null,
+      "engine": "svg"
+    },
+    {
+      "slug": "svg-to-avif",
+      "from": "svg",
+      "to": "avif",
+      "label": null,
+      "engine": "svg"
+    },
+    {
+      "slug": "svg-to-tiff",
+      "from": "svg",
+      "to": "tiff",
+      "label": null,
+      "engine": "svg"
+    },
+    {
+      "slug": "svg-to-gif",
+      "from": "svg",
+      "to": "gif",
+      "label": null,
+      "engine": "svg"
+    },
+    {
+      "slug": "psd-to-jpg",
+      "from": "psd",
+      "to": "jpg",
+      "label": null,
+      "engine": "psd"
+    },
+    {
+      "slug": "psd-to-png",
+      "from": "psd",
+      "to": "png",
+      "label": null,
+      "engine": "psd"
+    },
+    {
+      "slug": "psd-to-webp",
+      "from": "psd",
+      "to": "webp",
+      "label": null,
+      "engine": "psd"
+    },
+    {
+      "slug": "psd-to-avif",
+      "from": "psd",
+      "to": "avif",
+      "label": null,
+      "engine": "psd"
+    },
+    {
+      "slug": "psd-to-tiff",
+      "from": "psd",
+      "to": "tiff",
+      "label": null,
+      "engine": "psd"
+    },
+    {
+      "slug": "pdf-to-jpg",
+      "from": "pdf",
+      "to": "jpg",
+      "label": null,
+      "engine": "pdf"
+    },
+    {
+      "slug": "pdf-to-png",
+      "from": "pdf",
+      "to": "png",
+      "label": null,
+      "engine": "pdf"
+    },
+    {
+      "slug": "pdf-to-webp",
+      "from": "pdf",
+      "to": "webp",
+      "label": null,
+      "engine": "pdf"
+    },
+    {
+      "slug": "pdf-to-tiff",
+      "from": "pdf",
+      "to": "tiff",
+      "label": null,
+      "engine": "pdf"
+    },
+    {
+      "slug": "cr2-to-jpg",
+      "from": "cr2",
+      "to": "jpg",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "cr2-to-png",
+      "from": "cr2",
+      "to": "png",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "cr2-to-webp",
+      "from": "cr2",
+      "to": "webp",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "cr2-to-tiff",
+      "from": "cr2",
+      "to": "tiff",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "nef-to-jpg",
+      "from": "nef",
+      "to": "jpg",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "nef-to-png",
+      "from": "nef",
+      "to": "png",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "nef-to-webp",
+      "from": "nef",
+      "to": "webp",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "nef-to-tiff",
+      "from": "nef",
+      "to": "tiff",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "arw-to-jpg",
+      "from": "arw",
+      "to": "jpg",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "arw-to-png",
+      "from": "arw",
+      "to": "png",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "arw-to-webp",
+      "from": "arw",
+      "to": "webp",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "arw-to-tiff",
+      "from": "arw",
+      "to": "tiff",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "dng-to-jpg",
+      "from": "dng",
+      "to": "jpg",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "dng-to-png",
+      "from": "dng",
+      "to": "png",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "dng-to-webp",
+      "from": "dng",
+      "to": "webp",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "dng-to-tiff",
+      "from": "dng",
+      "to": "tiff",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "rw2-to-jpg",
+      "from": "rw2",
+      "to": "jpg",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "rw2-to-png",
+      "from": "rw2",
+      "to": "png",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "rw2-to-webp",
+      "from": "rw2",
+      "to": "webp",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "rw2-to-tiff",
+      "from": "rw2",
+      "to": "tiff",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "orf-to-jpg",
+      "from": "orf",
+      "to": "jpg",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "orf-to-png",
+      "from": "orf",
+      "to": "png",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "orf-to-webp",
+      "from": "orf",
+      "to": "webp",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "orf-to-tiff",
+      "from": "orf",
+      "to": "tiff",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "pef-to-jpg",
+      "from": "pef",
+      "to": "jpg",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "pef-to-png",
+      "from": "pef",
+      "to": "png",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "pef-to-webp",
+      "from": "pef",
+      "to": "webp",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "pef-to-tiff",
+      "from": "pef",
+      "to": "tiff",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "raf-to-jpg",
+      "from": "raf",
+      "to": "jpg",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "raf-to-png",
+      "from": "raf",
+      "to": "png",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "raf-to-webp",
+      "from": "raf",
+      "to": "webp",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "raf-to-tiff",
+      "from": "raf",
+      "to": "tiff",
+      "label": null,
+      "engine": "raw"
+    },
+    {
+      "slug": "mp3-to-wav",
+      "from": "mp3",
+      "to": "wav",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mp3-to-flac",
+      "from": "mp3",
+      "to": "flac",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mp3-to-aac",
+      "from": "mp3",
+      "to": "aac",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mp3-to-ogg",
+      "from": "mp3",
+      "to": "ogg",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mp3-to-m4a",
+      "from": "mp3",
+      "to": "m4a",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mp3-to-opus",
+      "from": "mp3",
+      "to": "opus",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mp3-to-aiff",
+      "from": "mp3",
+      "to": "aiff",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "wav-to-mp3",
+      "from": "wav",
+      "to": "mp3",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "wav-to-flac",
+      "from": "wav",
+      "to": "flac",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "wav-to-aac",
+      "from": "wav",
+      "to": "aac",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "wav-to-ogg",
+      "from": "wav",
+      "to": "ogg",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "wav-to-m4a",
+      "from": "wav",
+      "to": "m4a",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "wav-to-opus",
+      "from": "wav",
+      "to": "opus",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "wav-to-aiff",
+      "from": "wav",
+      "to": "aiff",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "flac-to-mp3",
+      "from": "flac",
+      "to": "mp3",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "flac-to-wav",
+      "from": "flac",
+      "to": "wav",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "flac-to-aac",
+      "from": "flac",
+      "to": "aac",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "flac-to-ogg",
+      "from": "flac",
+      "to": "ogg",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "flac-to-m4a",
+      "from": "flac",
+      "to": "m4a",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "flac-to-opus",
+      "from": "flac",
+      "to": "opus",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "flac-to-aiff",
+      "from": "flac",
+      "to": "aiff",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "aac-to-mp3",
+      "from": "aac",
+      "to": "mp3",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "aac-to-wav",
+      "from": "aac",
+      "to": "wav",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "aac-to-flac",
+      "from": "aac",
+      "to": "flac",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "aac-to-ogg",
+      "from": "aac",
+      "to": "ogg",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "aac-to-m4a",
+      "from": "aac",
+      "to": "m4a",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "aac-to-opus",
+      "from": "aac",
+      "to": "opus",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "aac-to-aiff",
+      "from": "aac",
+      "to": "aiff",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "ogg-to-mp3",
+      "from": "ogg",
+      "to": "mp3",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "ogg-to-wav",
+      "from": "ogg",
+      "to": "wav",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "ogg-to-flac",
+      "from": "ogg",
+      "to": "flac",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "ogg-to-aac",
+      "from": "ogg",
+      "to": "aac",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "ogg-to-m4a",
+      "from": "ogg",
+      "to": "m4a",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "ogg-to-opus",
+      "from": "ogg",
+      "to": "opus",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "ogg-to-aiff",
+      "from": "ogg",
+      "to": "aiff",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "m4a-to-mp3",
+      "from": "m4a",
+      "to": "mp3",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "m4a-to-wav",
+      "from": "m4a",
+      "to": "wav",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "m4a-to-flac",
+      "from": "m4a",
+      "to": "flac",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "m4a-to-aac",
+      "from": "m4a",
+      "to": "aac",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "m4a-to-ogg",
+      "from": "m4a",
+      "to": "ogg",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "m4a-to-opus",
+      "from": "m4a",
+      "to": "opus",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "m4a-to-aiff",
+      "from": "m4a",
+      "to": "aiff",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "opus-to-mp3",
+      "from": "opus",
+      "to": "mp3",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "opus-to-wav",
+      "from": "opus",
+      "to": "wav",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "opus-to-flac",
+      "from": "opus",
+      "to": "flac",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "opus-to-aac",
+      "from": "opus",
+      "to": "aac",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "opus-to-ogg",
+      "from": "opus",
+      "to": "ogg",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "opus-to-m4a",
+      "from": "opus",
+      "to": "m4a",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "opus-to-aiff",
+      "from": "opus",
+      "to": "aiff",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "aiff-to-mp3",
+      "from": "aiff",
+      "to": "mp3",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "aiff-to-wav",
+      "from": "aiff",
+      "to": "wav",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "aiff-to-flac",
+      "from": "aiff",
+      "to": "flac",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "aiff-to-aac",
+      "from": "aiff",
+      "to": "aac",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "aiff-to-ogg",
+      "from": "aiff",
+      "to": "ogg",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "aiff-to-m4a",
+      "from": "aiff",
+      "to": "m4a",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "aiff-to-opus",
+      "from": "aiff",
+      "to": "opus",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mp4-to-mov",
+      "from": "mp4",
+      "to": "mov",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mp4-to-mkv",
+      "from": "mp4",
+      "to": "mkv",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mp4-to-avi",
+      "from": "mp4",
+      "to": "avi",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mp4-to-webm",
+      "from": "mp4",
+      "to": "webm",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mp4-to-wmv",
+      "from": "mp4",
+      "to": "wmv",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mp4-to-mp3",
+      "from": "mp4",
+      "to": "mp3",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mp4-to-wav",
+      "from": "mp4",
+      "to": "wav",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mp4-to-aac",
+      "from": "mp4",
+      "to": "aac",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mp4-to-m4a",
+      "from": "mp4",
+      "to": "m4a",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mp4-to-ogg",
+      "from": "mp4",
+      "to": "ogg",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mp4-to-gif",
+      "from": "mp4",
+      "to": "gif",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mov-to-mp4",
+      "from": "mov",
+      "to": "mp4",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mov-to-mkv",
+      "from": "mov",
+      "to": "mkv",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mov-to-avi",
+      "from": "mov",
+      "to": "avi",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mov-to-webm",
+      "from": "mov",
+      "to": "webm",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mov-to-wmv",
+      "from": "mov",
+      "to": "wmv",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mov-to-mp3",
+      "from": "mov",
+      "to": "mp3",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mov-to-wav",
+      "from": "mov",
+      "to": "wav",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mov-to-aac",
+      "from": "mov",
+      "to": "aac",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mov-to-m4a",
+      "from": "mov",
+      "to": "m4a",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mov-to-ogg",
+      "from": "mov",
+      "to": "ogg",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mov-to-gif",
+      "from": "mov",
+      "to": "gif",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mkv-to-mp4",
+      "from": "mkv",
+      "to": "mp4",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mkv-to-mov",
+      "from": "mkv",
+      "to": "mov",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mkv-to-avi",
+      "from": "mkv",
+      "to": "avi",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mkv-to-webm",
+      "from": "mkv",
+      "to": "webm",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mkv-to-wmv",
+      "from": "mkv",
+      "to": "wmv",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mkv-to-mp3",
+      "from": "mkv",
+      "to": "mp3",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mkv-to-wav",
+      "from": "mkv",
+      "to": "wav",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mkv-to-aac",
+      "from": "mkv",
+      "to": "aac",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mkv-to-m4a",
+      "from": "mkv",
+      "to": "m4a",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mkv-to-ogg",
+      "from": "mkv",
+      "to": "ogg",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "mkv-to-gif",
+      "from": "mkv",
+      "to": "gif",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "avi-to-mp4",
+      "from": "avi",
+      "to": "mp4",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "avi-to-mov",
+      "from": "avi",
+      "to": "mov",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "avi-to-mkv",
+      "from": "avi",
+      "to": "mkv",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "avi-to-webm",
+      "from": "avi",
+      "to": "webm",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "avi-to-wmv",
+      "from": "avi",
+      "to": "wmv",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "avi-to-mp3",
+      "from": "avi",
+      "to": "mp3",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "avi-to-wav",
+      "from": "avi",
+      "to": "wav",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "avi-to-aac",
+      "from": "avi",
+      "to": "aac",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "avi-to-m4a",
+      "from": "avi",
+      "to": "m4a",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "avi-to-ogg",
+      "from": "avi",
+      "to": "ogg",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "avi-to-gif",
+      "from": "avi",
+      "to": "gif",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "webm-to-mp4",
+      "from": "webm",
+      "to": "mp4",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "webm-to-mov",
+      "from": "webm",
+      "to": "mov",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "webm-to-mkv",
+      "from": "webm",
+      "to": "mkv",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "webm-to-avi",
+      "from": "webm",
+      "to": "avi",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "webm-to-wmv",
+      "from": "webm",
+      "to": "wmv",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "webm-to-mp3",
+      "from": "webm",
+      "to": "mp3",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "webm-to-wav",
+      "from": "webm",
+      "to": "wav",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "webm-to-aac",
+      "from": "webm",
+      "to": "aac",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "webm-to-m4a",
+      "from": "webm",
+      "to": "m4a",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "webm-to-ogg",
+      "from": "webm",
+      "to": "ogg",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "webm-to-gif",
+      "from": "webm",
+      "to": "gif",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "wmv-to-mp4",
+      "from": "wmv",
+      "to": "mp4",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "wmv-to-mov",
+      "from": "wmv",
+      "to": "mov",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "wmv-to-mkv",
+      "from": "wmv",
+      "to": "mkv",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "wmv-to-avi",
+      "from": "wmv",
+      "to": "avi",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "wmv-to-webm",
+      "from": "wmv",
+      "to": "webm",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "wmv-to-mp3",
+      "from": "wmv",
+      "to": "mp3",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "wmv-to-wav",
+      "from": "wmv",
+      "to": "wav",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "wmv-to-aac",
+      "from": "wmv",
+      "to": "aac",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "wmv-to-m4a",
+      "from": "wmv",
+      "to": "m4a",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "wmv-to-ogg",
+      "from": "wmv",
+      "to": "ogg",
+      "label": null,
+      "engine": "ffmpeg"
+    },
+    {
+      "slug": "wmv-to-gif",
+      "from": "wmv",
+      "to": "gif",
+      "label": null,
+      "engine": "ffmpeg"
+    }
+  ]
+}
