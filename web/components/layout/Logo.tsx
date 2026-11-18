@@ -1,21 +1,14 @@
 import Link from "next/link";
 
-export function LogoMark({ className = "h-8 w-8" }: { className?: string }) {
+export function Logo({ light }: { light?: boolean }) {
   return (
-    <svg className={className} viewBox="0 0 32 32" fill="none" aria-hidden>
-      <rect width="32" height="32" rx="8" className="fill-primary" />
-      <path d="M17.5 6L9 17.5h6L14.5 26 23 14.5h-6l.5-8.5z" fill="#fff" />
-    </svg>
-  );
-}
-
-export function Logo() {
-  return (
-    <Link href="/" className="flex items-center gap-2.5" aria-label="Quick Image Convert home">
-      <LogoMark />
-      <span className="text-lg font-bold tracking-tight text-text">
-        Quick Image <span className="text-primary">Convert</span>
+    <Link href="/" className="flex items-center gap-2.5 font-extrabold tracking-tight" aria-label="Quick Image Convert home">
+      <span className={`grid size-9 place-items-center rounded-xl shadow-sm ${light ? "bg-white text-primary" : "bg-primary text-primary-ink"}`}>
+        <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M4 8h13l-3-3M20 16H7l3 3" />
+        </svg>
       </span>
+      <span className="hidden text-lg min-[430px]:inline">Quick Image Convert</span>
     </Link>
   );
 }

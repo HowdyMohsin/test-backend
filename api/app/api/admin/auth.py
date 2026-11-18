@@ -1,100 +1,77 @@
-"""Admin auth: email + password (argon2), httpOnly cookie session, roles."""
-
 from __future__ import annotations
 
-import hashlib
-import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 from fastapi import APIRouter, Depends, Request, Response
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import audit, get_admin, get_db
-from app.core.errors import APIError, ErrorCode
-from app.db.models import AdminSession, AdminUser
-from app.schemas import v1 as s
-from app.settings import settings
+from ...core.errors import ApiError
+from ...core.security import client_ip, rate_limited
+from ...db.models import AdminUser
+from ...db.session import get_db
+from ...settings import get_settings
+from .deps import COOKIE, SESSION_SECONDS, TABS, audit, get_admin, make_session
 
-router = APIRouter()
+router = APIRouter(prefix="/auth")
 _ph = PasswordHasher()
 
-ALL_TABS = ["dashboard", "formats", "plans", "users", "team", "jobs", "ads", "reports", "settings"]
+
+class LoginIn(BaseModel):
+    email: str = Field(max_length=320)
+    password: str = Field(max_length=200)
 
 
-def hash_password(password: str) -> str:
-    return _ph.hash(password)
+class PasswordIn(BaseModel):
+    current: str
+    new: str = Field(min_length=10, max_length=200)
 
 
-def verify_password(password_hash: str, password: str) -> bool:
+def profile(a: AdminUser) -> dict:
+    return {"email": a.email, "role": a.role, "tabs": TABS if a.role == "super_admin" else list(a.tabs or []),
+            "must_change_password": a.must_change_password}
+
+
+@router.post("/login")
+async def login(body: LoginIn, request: Request, response: Response, db: AsyncSession = Depends(get_db)):
+    if rate_limited("login:" + client_ip(request), 8, 300):
+        raise ApiError("rate_limited", "Too many attempts. Wait a few minutes.", 429)
+    admin = (await db.execute(select(AdminUser).where(AdminUser.email == body.email.strip().lower()))).scalar_one_or_none()
     try:
-        return _ph.verify(password_hash, password)
+        if admin is None or not admin.active:
+            raise VerifyMismatchError
+        _ph.verify(admin.password_hash, body.password)
     except VerifyMismatchError:
-        return False
-    except Exception:
-        return False
-
-
-@router.post("/auth/login", response_model=s.AdminMeResponse)
-async def login(
-    body: s.AdminLoginRequest, request: Request, response: Response, db: AsyncSession = Depends(get_db)
-) -> s.AdminMeResponse:
-    admin = (
-        await db.execute(select(AdminUser).where(AdminUser.email == body.email.lower().strip()))
-    ).scalar_one_or_none()
-    if admin is None or admin.disabled or not verify_password(admin.password_hash, body.password):
-        raise APIError(ErrorCode.UNAUTHORIZED, "wrong email or password")
-    raw_token = secrets.token_urlsafe(48)
-    db.add(
-        AdminSession(
-            token_hash=hashlib.sha256(raw_token.encode()).hexdigest(),
-            admin_id=admin.id,
-            expires_at=datetime.now(timezone.utc) + timedelta(hours=settings.admin_session_ttl_hours),
-            ip=request.client.host if request.client else None,
-        )
-    )
+        raise ApiError("bad_login", "Wrong email or password.", 401) from None
+    admin.last_login_at = datetime.now(timezone.utc)
     await db.commit()
-    response.set_cookie(
-        settings.admin_cookie_name,
-        raw_token,
-        httponly=True,
-        samesite="lax",
-        max_age=settings.admin_session_ttl_hours * 3600,
-        path="/",
-    )
-    await audit(db, admin, "login", request)
-    return _me_response(admin)
+    response.set_cookie(COOKIE, make_session(admin), max_age=SESSION_SECONDS, httponly=True, samesite="lax",
+                        secure=get_settings().env != "dev")
+    return profile(admin)
 
 
-@router.post("/auth/logout")
-async def logout(
-    request: Request, response: Response, admin: AdminUser = Depends(get_admin), db: AsyncSession = Depends(get_db)
-) -> dict:
-    token = request.cookies.get(settings.admin_cookie_name)
-    if token:
-        th = hashlib.sha256(token.encode()).hexdigest()
-        sess = (await db.execute(select(AdminSession).where(AdminSession.token_hash == th))).scalar_one_or_none()
-        if sess:
-            await db.delete(sess)
-            await db.commit()
-    response.delete_cookie(settings.admin_cookie_name, path="/")
-    await audit(db, admin, "logout", request)
+@router.post("/logout")
+async def logout(response: Response):
+    response.delete_cookie(COOKIE)
     return {"ok": True}
 
 
-@router.get("/auth/me", response_model=s.AdminMeResponse)
-async def me(admin: AdminUser = Depends(get_admin)) -> s.AdminMeResponse:
-    return _me_response(admin)
+@router.get("/me")
+async def me(admin: AdminUser = Depends(get_admin)):
+    return profile(admin)
 
 
-def _me_response(admin: AdminUser) -> s.AdminMeResponse:
-    tabs = ALL_TABS if admin.role == "owner" else list(admin.allowed_tabs or [])
-    return s.AdminMeResponse(
-        user=s.AdminUserSchema(
-            id=admin.id, email=admin.email, role=admin.role,
-            allowed_tabs=list(admin.allowed_tabs or []), disabled=admin.disabled,
-        ),
-        tabs=tabs,
-    )
+@router.post("/change-password")
+async def change_password(body: PasswordIn, admin: AdminUser = Depends(get_admin), db: AsyncSession = Depends(get_db)):
+    try:
+        _ph.verify(admin.password_hash, body.current)
+    except VerifyMismatchError:
+        raise ApiError("bad_login", "The current password is wrong.", 401) from None
+    admin.password_hash = _ph.hash(body.new)
+    admin.must_change_password = False
+    await audit(db, admin, "password.change", admin.email)
+    await db.commit()
+    return {"ok": True}

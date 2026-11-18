@@ -1,45 +1,49 @@
-"""Firebase ID token verification (server-side, via firebase-admin)."""
-
+"""Verifies Firebase ID tokens on the server. Optional: without config everyone is anonymous."""
 from __future__ import annotations
 
-from functools import lru_cache
+import logging
 
-from app.core.errors import APIError, ErrorCode
-from app.settings import settings
+from ..settings import get_settings
+
+log = logging.getLogger("qic.firebase")
+_ready: bool | None = None
 
 
-@lru_cache(maxsize=1)
-def _app():
+def _init() -> bool:
+    global _ready
+    if _ready is not None:
+        return _ready
+    s = get_settings()
     try:
         import firebase_admin
         from firebase_admin import credentials
-    except ImportError as exc:
-        raise APIError(ErrorCode.INTERNAL, "firebase-admin is not installed") from exc
-    try:
-        return firebase_admin.get_app()
-    except ValueError:
-        return firebase_admin.initialize_app(
-            credentials.ApplicationDefault(),
-            {"projectId": settings.firebase_project_id},
-        )
+
+        if s.firebase_credentials_path:
+            firebase_admin.initialize_app(credentials.Certificate(s.firebase_credentials_path))
+        elif s.firebase_project_id:
+            firebase_admin.initialize_app(options={"projectId": s.firebase_project_id})
+        else:
+            _ready = False
+            return False
+        _ready = True
+    except Exception as e:  # noqa: BLE001
+        log.warning("Firebase not available: %s", e)
+        _ready = False
+    return _ready
 
 
-def verify_id_token(id_token: str) -> dict:
-    """Return the decoded claims (uid, email) or raise UNAUTHORIZED."""
-    try:
-        from firebase_admin import auth as fb_auth
-
-        return fb_auth.verify_id_token(_app(), id_token, check_revoked=False)
-    except APIError:
-        raise
-    except Exception as exc:
-        raise APIError(ErrorCode.UNAUTHORIZED, "invalid login token") from exc
+def configured() -> bool:
+    return _init()
 
 
-def try_verify_id_token(id_token: str | None) -> dict | None:
-    if not id_token:
+def verify(token: str) -> dict | None:
+    """Returns {uid, email} for a valid token, else None."""
+    if not _init():
         return None
+    from firebase_admin import auth
+
     try:
-        return verify_id_token(id_token)
-    except APIError:
+        d = auth.verify_id_token(token)
+        return {"uid": d["uid"], "email": d.get("email")}
+    except Exception:  # noqa: BLE001 - expired, forged or malformed
         return None

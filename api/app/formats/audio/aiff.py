@@ -1,31 +1,18 @@
-"""AIFF format declaration — declares truth only, does no work."""
-from __future__ import annotations
-
-from app.formats.base import FormatSpec, _sel
+"""AIFF audio."""
+from ..base import Flags, FormatSpec
+from ..fields import AUDIO_COMMON, BITRATES, num, rng, sel
+from ..groups import audio_targets
+from ..sniff import aiff
 
 SPEC = FormatSpec(
-    slug="aiff",
-    name="AIFF",
-    category="audio",
-    extensions=('aif', 'aiff'),
-    mime="audio/aiff",
-    magic=(
-        ((0, b'FORM'), (8, b'AIFF'),),
-        ((0, b'FORM'), (8, b'AIFC'),),
-    ),
-    reader="ffmpeg",
-    writer="ffmpeg",
-    targets=(
-        "mp3",
-        "wav",
-        "flac",
-        "aac",
-        "ogg",
-        "m4a",
-        "opus"
-    ),
+    slug="aiff", name="AIFF", category="audio",
+    extensions=('aiff', 'aif', 'aifc'), mime="audio/aiff",
+    sniff=aiff,
+    flags=Flags(lossy=False),
+    default_target="mp3", reader="ffmpeg", writer="ffmpeg",
+    targets=audio_targets("aiff"),
     output_settings=(
-        _sel("bit_depth", "Bit depth", ("16", "24"), "16"),
-    ),
-    flags=(),
+        sel("bit_depth", "Bit depth", [("16", "16-bit"), ("24", "24-bit"), ("32", "32-bit")], "16"),
+    ) + AUDIO_COMMON,
+    tips=("AIFF is uncompressed audio used on Apple systems.",),
 )

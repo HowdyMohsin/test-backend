@@ -1,136 +1,102 @@
-"""Job endpoints: status, download, server-side zip."""
-
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from uuid import UUID
+import tempfile
+import uuid
+import zipfile
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.background import BackgroundTask
 
-from app.api.deps import get_db, get_identity
-from app.core.plan_guard import Identity
-from app.schemas import v1 as api_schemas
-from app.services import jobs as job_service
-from app.settings import settings
+from ...core import quota
+from ...core.errors import ApiError
+from ...core.security import make_token, read_token
+from ...db.models import Job
+from ...db.session import get_db
+from ...formats import registry
 
 router = APIRouter()
 
 
-async def _job_to_response(db: AsyncSession, job) -> api_schemas.JobResponse:
-    return api_schemas.JobResponse(
-        id=job.id,
-        status=job.status,
-        progress=job.progress,
-        queue_position=await job_service.queue_position(db, job),
-        download_url=job_service.download_url_for(job),
-        error=api_schemas.JobErrorSchema(code=job.error_code, message=job.error_message or "")
-        if job.error_code
-        else None,
-    )
+async def job_dict(db: AsyncSession, j: Job) -> dict:
+    d = {"id": str(j.id), "status": j.status, "progress": j.progress, "pair": j.pair_slug, "notes": j.notes or [],
+         "queue_position": None, "download_url": None, "name": j.out_name, "size": j.out_size, "info": j.out_info or {}, "error": None}
+    if j.status == "queued":
+        d["queue_position"] = (await db.execute(text("select count(*) from jobs where status='queued' and created_at <= :c"), {"c": j.created_at})).scalar_one()
+    if j.status == "done":
+        d["download_url"] = f"/v1/jobs/{j.id}/download?token={make_token(str(j.id))}"
+    if j.status in ("failed",):
+        d["error"] = {"code": j.error_code, "message": j.error_message}
+    return d
 
 
-@router.get("/jobs", response_model=list[api_schemas.JobResponse])
-async def jobs_batch_status(
-    response: Response,
-    ids: str = Query(..., description="comma-separated job ids, max 100", max_length=3600),
-    db: AsyncSession = Depends(get_db),
-    ident: tuple[Identity, str | None] = Depends(get_identity),
-) -> list[api_schemas.JobResponse]:
-    """Status for many jobs at once (polling). Unknown ids are skipped."""
-    identity, new_cookie = ident
-    if new_cookie:
-        response.set_cookie(
-            settings.anon_cookie_name, new_cookie, httponly=True, samesite="lax", max_age=31536000
-        )
-    results: list[api_schemas.JobResponse] = []
-    for raw_id in ids.split(",")[:100]:
-        raw_id = raw_id.strip()
-        if not raw_id:
-            continue
-        try:
-            job_id = UUID(raw_id)
-        except ValueError:
-            continue
-        try:
-            job = await job_service.get_job(db, job_id, identity.owner_key)
-        except Exception:
-            continue
-        results.append(await _job_to_response(db, job))
-    return results
+@router.get("/jobs")
+async def jobs_status(ids: str = Query(..., description="comma separated job ids"), db: AsyncSession = Depends(get_db)):
+    try:
+        wanted = [uuid.UUID(i) for i in ids.split(",")[:200] if i]
+    except ValueError:
+        raise ApiError("invalid_request", "Bad job id.", 422) from None
+    rows = (await db.execute(select(Job).where(Job.id.in_(wanted)))).scalars().all()
+    return {"jobs": [await job_dict(db, j) for j in rows]}
 
 
-@router.get("/jobs/{job_id}", response_model=api_schemas.JobResponse)
-async def job_status(
-    job_id: UUID,
-    response: Response,
-    db: AsyncSession = Depends(get_db),
-    ident: tuple[Identity, str | None] = Depends(get_identity),
-) -> api_schemas.JobResponse:
-    identity, new_cookie = ident
-    if new_cookie:
-        response.set_cookie(
-            settings.anon_cookie_name, new_cookie, httponly=True, samesite="lax", max_age=31536000
-        )
-    job = await job_service.get_job(db, job_id, identity.owner_key)
-    return await _job_to_response(db, job)
+@router.get("/jobs/{job_id}")
+async def job_status(job_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    j = await db.get(Job, job_id)
+    if j is None:
+        raise ApiError("not_found", "This job was not found. It may have expired.", 404)
+    return await job_dict(db, j)
 
 
 @router.post("/jobs/{job_id}/cancel")
-async def job_cancel(
-    job_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    ident: tuple[Identity, str | None] = Depends(get_identity),
-) -> dict:
-    """Cancel a job that has not finished yet."""
-    identity, _new_cookie = ident
-    await job_service.cancel_job(db, job_id, identity.owner_key)
+async def cancel(job_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    j = await db.get(Job, job_id)
+    if j is None:
+        raise ApiError("not_found", "This job was not found.", 404)
+    r = await db.execute(text("update jobs set status='cancelled', finished_at=now() where id=:i and status in ('queued','processing') returning created_at"),
+                         {"i": job_id})
+    row = r.first()
+    if row:
+        await quota.refund(db, j.owner_key, row[0].date())
+    await db.commit()
     return {"ok": True}
 
 
 @router.get("/jobs/{job_id}/download")
-async def job_download(token: str = Query(...)) -> FileResponse:
-    _job, filename, mime, path = await job_service.resolve_download(token)
-    return FileResponse(
-        path,
-        filename=filename,
-        media_type=mime,
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
-            "X-Content-Type-Options": "nosniff",
-        },
-    )
+async def download(job_id: uuid.UUID, token: str, db: AsyncSession = Depends(get_db)):
+    if read_token(token) != str(job_id):
+        raise ApiError("invalid_token", "This download link has expired. Please convert again.", 403)
+    j = await db.get(Job, job_id)
+    if j is None or j.status != "done" or not j.out_path or not Path(j.out_path).exists():
+        raise ApiError("not_found", "This file is no longer available. Files are deleted after one hour.", 404)
+    mime = registry.formats()[j.to_slug].mime if not j.out_path.endswith(".zip") else "application/zip"
+    return FileResponse(j.out_path, media_type=mime, filename=j.out_name, content_disposition_type="attachment",
+                        headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "no-store"})
 
 
-@router.post("/jobs/zip", response_model=api_schemas.ZipResponse, status_code=201)
-async def jobs_zip(
-    body: api_schemas.ZipRequest,
-    response: Response,
-    db: AsyncSession = Depends(get_db),
-    ident: tuple[Identity, str | None] = Depends(get_identity),
-) -> api_schemas.ZipResponse:
-    identity, new_cookie = ident
-    if new_cookie:
-        response.set_cookie(
-            settings.anon_cookie_name, new_cookie, httponly=True, samesite="lax", max_age=31536000
-        )
-    url, _rel = await job_service.create_zip(db, identity, body.job_ids)
-    return api_schemas.ZipResponse(
-        download_url=url,
-        expires_at=datetime.now(timezone.utc) + timedelta(hours=settings.download_ttl_hours),
-    )
+class ZipIn(BaseModel):
+    job_ids: list[uuid.UUID] = Field(min_length=1, max_length=200)
+    name: str = Field(default="converted-files", max_length=60)
 
 
-@router.get("/jobs/zip/download")
-async def zip_download(token: str = Query(...)) -> FileResponse:
-    path, filename = await job_service.resolve_zip_download(token)
-    return FileResponse(
-        path,
-        filename=filename,
-        media_type="application/zip",
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
-            "X-Content-Type-Options": "nosniff",
-        },
-    )
+@router.post("/jobs/zip")
+async def zip_jobs(body: ZipIn, db: AsyncSession = Depends(get_db)):
+    rows = (await db.execute(select(Job).where(Job.id.in_(body.job_ids), Job.status == "done"))).scalars().all()
+    files = [(j.out_name, Path(j.out_path)) for j in rows if j.out_path and Path(j.out_path).exists()]
+    if not files:
+        raise ApiError("not_found", "None of these files are available any more.", 404)
+    tmp = Path(tempfile.mkstemp(suffix=".zip")[1])
+    used: dict[str, int] = {}
+    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED) as zf:
+        for name, p in files:
+            n = used.get(name, 0)
+            used[name] = n + 1
+            arc = name if n == 0 else f"{Path(name).stem} ({n}){Path(name).suffix}"
+            zf.write(p, arc)
+    safe = "".join(c for c in body.name if c.isalnum() or c in "-_ ") or "converted-files"
+    return FileResponse(tmp, media_type="application/zip", filename=f"{safe}.zip", content_disposition_type="attachment",
+                        background=BackgroundTask(lambda: tmp.unlink(missing_ok=True)), headers={"X-Content-Type-Options": "nosniff"})

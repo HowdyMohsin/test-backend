@@ -1,92 +1,62 @@
 "use client";
-import type { SettingField as FieldSchema, SettingValue } from "@/lib/api/generated";
-import { Select } from "@/components/ui/Select";
-import { Slider } from "@/components/ui/Slider";
-import { NumberInput } from "@/components/ui/NumberInput";
+
+import { Input, Select } from "@/components/ui/Input";
 import { Switch } from "@/components/ui/Switch";
-import { ColorInput } from "@/components/ui/ColorInput";
+import type { Field } from "@/lib/types";
 
-/** One schema-driven option field. Unknown types fall back to text. */
-export function SettingField({
-  field,
-  value,
-  onChange,
-}: {
-  field: FieldSchema;
-  value: SettingValue | undefined;
-  onChange: (value: SettingValue) => void;
-}) {
-  const current: SettingValue =
-    value !== undefined ? value : (field.default as SettingValue);
+type Value = string | number | boolean | null | undefined;
 
-  const labeled = (control: React.ReactNode) => (
-    <div>
-      <div className="mb-1 flex items-center justify-between">
-        <span className="text-xs font-medium text-text-muted" title={field.help || undefined}>
-          {field.label}
-        </span>
-        {(field.type === "range" || field.type === "number") && (
-          <span className="text-xs text-text-muted">{String(current)}</span>
-        )}
+export function SettingField({ field, value, onChange }: { field: Field; value: Value; onChange: (v: string | number | boolean) => void }) {
+  const id = `opt-${field.key}`;
+  let control: React.ReactNode;
+  if (field.type === "boolean") {
+    control = <Switch checked={value === true} onChange={onChange} label={field.label} />;
+  } else if (field.type === "select") {
+    control = (
+      <Select id={id} value={String(value ?? field.default ?? "")} onChange={(e) => onChange(e.target.value)}>
+        {field.options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </Select>
+    );
+  } else if (field.type === "range") {
+    control = (
+      <div className="flex items-center gap-3">
+        <input id={id} type="range" className="h-2 flex-1 accent-[var(--primary)]" min={field.min ?? 0} max={field.max ?? 100} step={field.step ?? 1}
+          value={Number(value ?? field.default ?? 0)} onChange={(e) => onChange(Number(e.target.value))} />
+        <span className="w-9 text-right text-sm font-semibold tabular-nums">{String(value ?? field.default ?? "")}</span>
       </div>
+    );
+  } else if (field.type === "number") {
+    control = (
+      <Input id={id} type="number" inputMode="decimal" min={field.min ?? undefined} max={field.max ?? undefined} step={field.step ?? 1}
+        value={value === null || value === undefined ? "" : String(value)} placeholder={field.default === null ? "auto" : undefined}
+        onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))} />
+    );
+  } else if (field.type === "color") {
+    const transparentAllowed = field.default === "transparent";
+    const v = String(value ?? field.default ?? "#ffffff");
+    control = transparentAllowed ? (
+      <Select id={id} value={v} onChange={(e) => onChange(e.target.value)}>
+        <option value="transparent">Transparent</option>
+        <option value="#ffffff">White</option>
+        <option value="#000000">Black</option>
+      </Select>
+    ) : (
+      <div className="flex items-center gap-2">
+        <input id={id} type="color" className="h-10 w-14 cursor-pointer rounded-lg border border-line bg-surface p-1" value={v} onChange={(e) => onChange(e.target.value)} />
+        <span className="text-sm tabular-nums text-muted">{v}</span>
+      </div>
+    );
+  } else {
+    control = <Input id={id} value={String(value ?? "")} onChange={(e) => onChange(e.target.value)} />;
+  }
+  const inline = field.type === "boolean";
+  return (
+    <div className={inline ? "flex items-center justify-between gap-3 rounded-xl border border-line bg-surface px-3 py-2" : "space-y-1.5"}>
+      <label htmlFor={id} className="text-sm font-medium">{field.label}</label>
       {control}
-      {field.help && <p className="mt-0.5 text-[11px] text-text-muted">{field.help}</p>}
+      {field.help && !inline && <p className="text-xs text-muted">{field.help}</p>}
     </div>
   );
-
-  switch (field.type) {
-    case "select":
-      return labeled(
-        <Select value={String(current)} onChange={(e) => onChange(e.target.value)} aria-label={field.label}>
-          {field.options.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </Select>
-      );
-    case "range":
-      return labeled(
-        <Slider
-          label={field.label}
-          value={Number(current) || 0}
-          min={field.min ?? 0}
-          max={field.max ?? 100}
-          onChange={(next) => onChange(next)}
-        />
-      );
-    case "number":
-      return labeled(
-        <NumberInput
-          aria-label={field.label}
-          value={Number(current) || 0}
-          min={field.min ?? undefined}
-          max={field.max ?? undefined}
-          onChange={(e) => onChange(Number(e.target.value))}
-        />
-      );
-    case "boolean":
-      return (
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-xs font-medium text-text-muted" title={field.help || undefined}>
-            {field.label}
-          </span>
-          <Switch label={field.label} checked={Boolean(current)} onChange={onChange} />
-        </div>
-      );
-    case "color":
-      return labeled(
-        <ColorInput label={field.label} value={String(current)} onChange={onChange} />
-      );
-    default:
-      return labeled(
-        <input
-          type="text"
-          aria-label={field.label}
-          value={String(current ?? "")}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text focus:border-accent focus:outline-none"
-        />
-      );
-  }
 }

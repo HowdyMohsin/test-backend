@@ -1,103 +1,57 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@import "@fontsource-variable/plus-jakarta-sans";
 
-/*
- * Design tokens (guide section 2). ALL colors live here as CSS variables.
- * No hex color may appear inside any component.
- */
+/* Design tokens from the new home page design. Components use these names only (bg-primary, text-muted ...). */
 :root {
-  --background: 248 250 252; /* slate-50 */
-  --surface: 255 255 255; /* white cards */
-  --surface-raised: 241 245 249; /* slate-100 */
-  --border: 226 232 240; /* slate-200 */
-  --text: 15 23 42; /* slate-900 */
-  --text-muted: 100 116 139; /* slate-500 */
-  --primary: 30 64 175; /* #1e40af blue-800 */
-  --primary-hover: 29 78 216; /* #1d4ed8 blue-700 */
-  --primary-contrast: 255 255 255;
-  --accent: 59 130 246; /* #3b82f6 blue-500 */
-  --success: 22 163 74; /* #16a34a */
-  --warning: 217 119 6; /* #d97706 */
-  --danger: 220 38 38; /* #dc2626 */
-  --ring: 59 130 246;
+  --bg: #f5f8ff;
+  --surface: #ffffff;
+  --surface-2: #f1f6ff;
+  --ink: #0f1f45;
+  --muted: #5b6b8c;
+  --line: #dde7f9;
+  --primary: #2977f5;
+  --primary-hover: #1d62d6;
+  --primary-ink: #ffffff;
+  --navy: #0f2a63;
+  --accent: #2977f5;
+  --accent-soft: #eaf2ff;
+  --success: #12a36b;
+  --success-soft: #dcf5ea;
+  --warn: #a14a07;
+  --warn-soft: #fcefd9;
+  --danger: #c4283f;
+  --danger-soft: #fde8ec;
   color-scheme: light;
 }
 
-.dark {
-  --background: 2 6 23; /* slate-950 */
-  --surface: 15 23 42; /* slate-900 */
-  --surface-raised: 30 41 59; /* slate-800 */
-  --border: 30 41 59; /* slate-800 */
-  --text: 241 245 249; /* slate-100 */
-  --text-muted: 148 163 184; /* slate-400 */
-  --primary: 59 130 246; /* blue-500 pops on dark */
-  --primary-hover: 96 165 250; /* blue-400 */
-  --primary-contrast: 255 255 255;
-  --accent: 96 165 250; /* blue-400 */
-  --success: 34 197 94;
-  --warning: 245 158 11;
-  --danger: 248 113 113;
-  --ring: 96 165 250;
-  color-scheme: dark;
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-ink: var(--primary-ink);
+  --color-navy: var(--navy);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --font-sans: "Plus Jakarta Sans Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --radius-card: 20px;
+  --shadow-card: 0 1px 2px rgb(15 31 69 / 0.05), 0 18px 40px -18px rgb(15 31 69 / 0.28);
 }
 
-@layer base {
-  html {
-    scroll-behavior: smooth;
-  }
-  body {
-    @apply bg-background text-text antialiased;
-  }
-  ::selection {
-    background: rgb(var(--accent) / 0.25);
-  }
-}
-
-/* LEGACY TOKENS — only app/convert/[pair] uses these until its P6 rebuild. */
-:root {
-  --legacy-ink: 10 10 15;
-  --legacy-paper: 245 245 244;
-  --legacy-mist: 161 161 170;
-  --legacy-acid: 190 242 100;
-  --legacy-iris: 139 124 255;
-  --legacy-line: 39 39 42;
-  --legacy-panel: 19 19 22;
-}
-
-/* Thin scrollbars for the file list */
-.scroll-thin {
-  scrollbar-width: thin;
-  scrollbar-color: rgb(var(--border)) transparent;
-}
-.scroll-thin::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-.scroll-thin::-webkit-scrollbar-thumb {
-  background: rgb(var(--border));
-  border-radius: 9999px;
-}
-
-/* Marquee for the format ticker */
-@keyframes marquee {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50%);
-  }
-}
-.animate-marquee {
-  animation: marquee 40s linear infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .animate-marquee {
-    animation: none;
-  }
-}
-
-/* Before/after compare slider */
-.compare-range {
-  @apply absolute inset-0 h-full w-full cursor-ew-resize opacity-0;
-}
+html { scroll-behavior: smooth; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-sans); font-size: 16px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+::selection { background: var(--accent-soft); }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+@keyframes fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.fade-up { animation: fade-up 0.35s ease both; }

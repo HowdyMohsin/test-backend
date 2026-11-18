@@ -1,31 +1,19 @@
-"""OPUS format declaration — declares truth only, does no work."""
-from __future__ import annotations
-
-from app.formats.base import FormatSpec, _sel
+"""OPUS audio."""
+from ..base import Flags, FormatSpec
+from ..fields import AUDIO_COMMON, BITRATES, num, rng, sel
+from ..groups import audio_targets
+from ..sniff import ogg_opus
 
 SPEC = FormatSpec(
-    slug="opus",
-    name="OPUS",
-    category="audio",
-    extensions=('opus',),
-    mime="audio/opus",
-    magic=(
-        ((0, b'OggS'),),
-    ),
-    magic_contains=(b'OpusHead',),
-    reader="ffmpeg",
-    writer="ffmpeg",
-    targets=(
-        "mp3",
-        "wav",
-        "flac",
-        "aac",
-        "ogg",
-        "m4a",
-        "aiff"
-    ),
+    slug="opus", name="OPUS", category="audio",
+    extensions=('opus',), mime="audio/opus",
+    sniff=ogg_opus,
+    flags=Flags(lossy=True),
+    default_target="mp3", reader="ffmpeg", writer="ffmpeg",
+    targets=audio_targets("opus"),
     output_settings=(
-        _sel("bitrate", "Bitrate", ("64k", "96k", "128k", "192k"), "128k"),
-    ),
-    flags=("lossy",),
+        num("bitrate", "Bitrate (kbps)", 128, 6, 510),
+        sel("opus_application", "Optimized for", [("audio", "Music"), ("voip", "Voice")], "audio"),
+    ) + AUDIO_COMMON,
+    tips=("OPUS is the best choice for low bitrates and voice.",),
 )

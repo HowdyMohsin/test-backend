@@ -1,19 +1,13 @@
 import type { ReactNode } from "react";
 
-type Tone = "info" | "success" | "warning" | "danger" | "neutral";
-
-const tones: Record<Tone, string> = {
-  info: "bg-accent/10 text-accent",
-  success: "bg-success/10 text-success",
-  warning: "bg-warning/10 text-warning",
-  danger: "bg-danger/10 text-danger",
-  neutral: "bg-surface-raised text-text-muted",
+const tones = {
+  neutral: "bg-surface-2 text-muted",
+  accent: "bg-accent-soft text-primary",
+  success: "bg-success-soft text-success",
+  warn: "bg-warn-soft text-warn",
+  danger: "bg-danger-soft text-danger",
 };
 
-export function Badge({ tone = "neutral", children }: { tone?: Tone; children: ReactNode }) {
-  return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${tones[tone]}`}>
-      {children}
-    </span>
-  );
+export function Badge({ tone = "neutral", children }: { tone?: keyof typeof tones; children: ReactNode }) {
+  return <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold ${tones[tone]}`}>{children}</span>;
 }

@@ -1,31 +1,23 @@
-"""WebP format declaration — declares truth only, does no work."""
-from __future__ import annotations
-
-from app.formats.base import FormatSpec, PairSpec, _range, _bool
+"""WebP."""
+from ..base import Flags, FormatSpec
+from ..fields import IMAGE_COMMON, TARGET_SIZE, flag, num, rng
+from ..groups import raster_targets
+from ..sniff import riff
 
 SPEC = FormatSpec(
-    slug="webp",
-    name="WebP",
-    category="image",
-    extensions=('webp',),
-    mime="image/webp",
-    magic=(
-        ((0, b'RIFF'), (8, b'WEBP'),),
+    slug="webp", name="WebP", category="image",
+    extensions=("webp",), mime="image/webp",
+    sniff=riff(b"WEBP"),
+    flags=Flags(lossy=True, alpha=True, animated=True),
+    default_target="jpg", reader="vips", writer="vips",
+    targets=raster_targets("webp"),
+    output_settings=IMAGE_COMMON + (
+        rng("quality", "Quality", 80, 1, 100),
+        TARGET_SIZE,
+        flag("lossless", "Lossless", False),
+        num("effort", "Effort (0-6)", 4, 0, 6, level="advanced"),
+        flag("near_lossless", "Near-lossless", False, level="advanced"),
+        flag("keep_animation", "Keep animation", True, level="advanced", show_if="source.animated"),
     ),
-    reader="vips",
-    writer="vips",
-    targets=(
-        "jpg",
-        "png",
-        "avif",
-        "gif",
-        "tiff",
-        PairSpec(to="svg", label="Vectorized (traced)", engine="trace")
-    ),
-    output_settings=(
-        _range("quality", "Quality", 85, 1, 100),
-        _bool("lossless", "Lossless mode"),
-        _bool("strip_metadata", "Remove metadata"),
-    ),
-    flags=("lossy", "alpha", "animated",),
+    tips=("WebP is usually smaller than JPG or PNG and works in all modern browsers.",),
 )

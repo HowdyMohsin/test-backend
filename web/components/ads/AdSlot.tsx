@@ -1,31 +1,22 @@
 "use client";
-import { useEffect, useState } from "react";
-import { getAd } from "@/lib/api/client";
-import { useMe } from "@/hooks/useMe";
 
-/** Ad slot for free users only. Never rendered inside the converter tool. */
+import { useEffect, useRef, useState } from "react";
+import { api } from "@/lib/api/client";
+import { useApp } from "@/lib/app-context";
+
+/** Renders an ad only if the admin switched this slot on. Never placed inside the converter. Pro users get nothing. */
 export function AdSlot({ slot }: { slot: string }) {
-  const { me } = useMe();
-  const [code, setCode] = useState<string | null>(null);
-
+  const { me } = useApp();
+  const [code, setCode] = useState("");
+  const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    let cancelled = false;
-    getAd(slot)
-      .then((response) => {
-        if (!cancelled) setCode(response.code || null);
-      })
-      .catch(() => {
-        if (!cancelled) setCode(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [slot]);
-
-  if (me?.plan === "pro" || !code) return null;
-  return (
-    <div className="mx-auto my-8 w-full max-w-6xl px-4 sm:px-6" aria-label="Advertisement">
-      <div dangerouslySetInnerHTML={{ __html: code }} />
-    </div>
-  );
+    if (!me || me.plan.id === "pro") return;
+    api.ads().then((r) => setCode(r.slots[slot] ?? "")).catch(() => undefined);
+  }, [me, slot]);
+  useEffect(() => {
+    if (!code || !box.current) return;
+    box.current.replaceChildren(document.createRange().createContextualFragment(code));
+  }, [code]);
+  if (!code) return null;
+  return <div ref={box} aria-label="Advertisement" className="mx-auto my-8 flex min-h-[90px] max-w-6xl justify-center px-4" />;
 }

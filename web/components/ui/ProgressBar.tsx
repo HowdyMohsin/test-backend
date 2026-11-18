@@ -1,8 +1,7 @@
-export function ProgressBar({ value, className = "" }: { value: number; className?: string }) {
-  const clamped = Math.max(0, Math.min(100, value));
+export function ProgressBar({ value, label }: { value: number; label: string }) {
   return (
-    <div className={`h-2 w-full overflow-hidden rounded-full bg-surface-raised ${className}`} role="progressbar" aria-valuenow={Math.round(clamped)} aria-valuemin={0} aria-valuemax={100}>
-      <div className="h-full rounded-full bg-accent transition-all duration-300" style={{ width: `${clamped}%` }} />
+    <div role="progressbar" aria-label={label} aria-valuenow={value} aria-valuemin={0} aria-valuemax={100} className="h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
+      <div className="h-full rounded-full bg-accent transition-[width] duration-500" style={{ width: `${Math.max(3, value)}%` }} />
     </div>
   );
 }

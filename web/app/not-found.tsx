@@ -1,19 +1,12 @@
 import Link from "next/link";
+import { Button } from "@/components/ui/Button";
 
 export default function NotFound() {
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col items-center px-4 py-20 text-center sm:px-6">
-      <p className="text-6xl font-extrabold text-text">404</p>
-      <h1 className="mt-4 text-2xl font-bold text-text">Page not found</h1>
-      <p className="mt-2 text-text-muted">
-        The page you&rsquo;re looking for doesn&rsquo;t exist or was moved.
-      </p>
-      <Link
-        href="/"
-        className="mt-6 inline-flex items-center justify-center rounded-lg bg-primary px-6 py-2.5 font-semibold text-primary-contrast hover:bg-primary-hover"
-      >
-        Back to the converter
-      </Link>
+    <div className="mx-auto max-w-xl px-4 py-24 text-center">
+      <h1 className="text-3xl font-bold">We could not find that page</h1>
+      <p className="mt-3 text-muted">It may have moved, or that converter is not available right now.</p>
+      <Link href="/"><Button className="mt-6" size="lg">Back to the converter</Button></Link>
     </div>
   );
 }

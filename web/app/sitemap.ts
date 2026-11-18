@@ -1,24 +1,10 @@
 import type { MetadataRoute } from "next";
+import { serverCatalog } from "@/lib/api/server";
+import { SITE_URL } from "@/lib/seo";
 
-/** Sitemap: homepage + pair pages. Pair slugs come from the backend registry at build time. */
+export const revalidate = 3600;
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const base = "https://quickimgconvert.com";
-  const entries: MetadataRoute.Sitemap = [{ url: base, changeFrequency: "daily", priority: 1 }];
-  try {
-    const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-    const response = await fetch(`${apiBase}/v1/formats`, { next: { revalidate: 86400 } });
-    if (response.ok) {
-      const data = (await response.json()) as { pairs: { slug: string }[] };
-      for (const pair of data.pairs ?? []) {
-        entries.push({
-          url: `${base}/convert/${pair.slug}`,
-          changeFrequency: "weekly",
-          priority: 0.8,
-        });
-      }
-    }
-  } catch {
-    // Sitemap still serves the homepage when the API is unreachable.
-  }
-  return entries;
+  const { pairs } = await serverCatalog();
+  return [{ url: SITE_URL, changeFrequency: "weekly", priority: 1 }, { url: `${SITE_URL}/pricing`, changeFrequency: "monthly" as const, priority: 0.6 }, ...pairs.map((p) => ({ url: `${SITE_URL}/convert/${p.slug}`, changeFrequency: "monthly" as const, priority: 0.8 }))];
 }

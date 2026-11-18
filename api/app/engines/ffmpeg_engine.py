@@ -1,193 +1,160 @@
-"""ffmpeg engine: audio<->audio, video<->video, video->audio, video->GIF.
-
-Fixed argument lists only (never shell=True). Network protocols disabled.
-Progress via `-progress pipe:1`. Video->GIF uses the 2-pass palette method.
-"""
-
+"""FFmpeg: audio<->audio, video<->video, video->audio, video->GIF, with a fast remux path."""
 from __future__ import annotations
 
-import asyncio
-import json
-import re
-import shutil
+import subprocess
 from pathlib import Path
-from typing import Callable
 
-from app.engines.base import EngineNotAvailableError, EngineError, JobContext
-from app.formats.base import AUDIO_SLUGS, VIDEO_SLUGS
+from .common import EngineError, progress
+from .probe import media_info
 
-# target slug -> (audio codec, extra audio args builder key)
-_AUDIO_CODECS: dict[str, list[str]] = {
-    "mp3": ["-c:a", "libmp3lame"],
-    "wav": ["-c:a", "pcm_s16le"],
-    "flac": ["-c:a", "flac"],
-    "aac": ["-c:a", "aac"],
-    "ogg": ["-c:a", "libvorbis"],
-    "m4a": ["-c:a", "aac"],
-    "opus": ["-c:a", "libopus"],
-    "aiff": ["-c:a", "pcm_s16le"],
+_COPY_OK = {
+    "mp4": ({"h264", "hevc", "mpeg4", "av1"}, {"aac", "mp3", "ac3"}),
+    "mov": ({"h264", "hevc", "mpeg4", "prores", "mjpeg"}, {"aac", "pcm_s16le", "pcm_s24le", "alac"}),
+    "mkv": ({"h264", "hevc", "vp8", "vp9", "av1", "mpeg4", "mpeg2video", "theora"},
+            {"aac", "mp3", "ac3", "opus", "vorbis", "flac", "pcm_s16le", "eac3"}),
+    "avi": ({"mpeg4", "mjpeg", "msmpeg4v3"}, {"mp3", "ac3", "pcm_s16le"}),
+    "webm": ({"vp8", "vp9", "av1"}, {"vorbis", "opus"}),
+    "wmv": ({"wmv1", "wmv2", "wmv3", "vc1"}, {"wmav1", "wmav2", "wmapro"}),
 }
-
-# target slug -> (video codec args, audio codec args)
-_VIDEO_CODECS: dict[str, tuple[list[str], list[str]]] = {
-    "mp4": (["-c:v", "libx264", "-pix_fmt", "yuv420p"], ["-c:a", "aac"]),
-    "mov": (["-c:v", "libx264", "-pix_fmt", "yuv420p"], ["-c:a", "aac"]),
-    "mkv": (["-c:v", "libx264", "-pix_fmt", "yuv420p"], ["-c:a", "aac"]),
-    "avi": (["-c:v", "mpeg4", "-pix_fmt", "yuv420p"], ["-c:a", "libmp3lame"]),
-    "webm": (["-c:v", "libvpx-vp9", "-pix_fmt", "yuv420p"], ["-c:a", "libopus"]),
-    "wmv": (["-c:v", "wmv2"], ["-c:a", "wmav2"]),
-}
+_PCM = {"wav": {"16": "pcm_s16le", "24": "pcm_s24le", "32": "pcm_f32le"}, "aiff": {"16": "pcm_s16be", "24": "pcm_s24be", "32": "pcm_s32be"}}
 
 
-def _bin(name: str) -> str:
-    path = shutil.which(name)
-    if not path:
-        raise EngineNotAvailableError(f"{name} binary is not installed")
-    return path
-
-
-async def _probe(path: Path) -> dict:
-    ffprobe = _bin("ffprobe")
-    proc = await asyncio.create_subprocess_exec(
-        ffprobe, "-v", "quiet", "-print_format", "json",
-        "-show_format", "-show_streams", str(path),
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-    )
-    out, _ = await proc.communicate()
-    if proc.returncode != 0:
-        raise EngineError("ffprobe could not read the media file (corrupt?)")
+def _f(s: dict, key: str, default: float = 0.0) -> float:
     try:
-        return json.loads(out.decode())
-    except json.JSONDecodeError as exc:
-        raise EngineError("ffprobe returned invalid data") from exc
+        return float(s.get(key) or default)
+    except (TypeError, ValueError):
+        return default
 
 
-def _duration(probe: dict) -> float:
-    try:
-        return float(probe["format"].get("duration") or 0)
-    except (KeyError, ValueError, TypeError):
-        return 0.0
+def _audio_codec(dst: str, s: dict) -> list[str]:
+    br = f"{s.get('bitrate', 192)}k"
+    if dst == "mp3":
+        q = ["-b:a", br] if s.get("mp3_mode", "cbr") == "cbr" else ["-q:a", str(s.get("vbr_quality", 2))]
+        return ["-c:a", "libmp3lame", *q, "-id3v2_version", "3"]
+    if dst in _PCM:
+        return ["-c:a", _PCM[dst][str(s.get("bit_depth", 16))], "-f", dst if dst == "aiff" else "wav"]
+    if dst == "flac":
+        extra = ["-sample_fmt", "s32", "-bits_per_raw_sample", "24"] if str(s.get("bit_depth", 16)) == "24" else ["-sample_fmt", "s16"]
+        return ["-c:a", "flac", "-compression_level", str(int(s.get("flac_compression", 5))), *extra]
+    if dst == "aac":
+        return ["-c:a", "aac", "-b:a", br, "-f", "adts"]
+    if dst == "m4a":
+        return ["-c:a", "aac", "-b:a", br, "-f", "ipod"]
+    if dst == "ogg":
+        return ["-c:a", "libvorbis", "-q:a", str(int(s.get("ogg_quality", 5))), "-f", "ogg"]
+    if dst == "opus":
+        return ["-c:a", "libopus", "-b:a", br, "-application", s.get("opus_application", "audio"), "-f", "opus"]
+    raise EngineError("unsupported_format", f"Cannot write {dst}.")
 
 
-def _audio_args(to_format: str, settings: dict) -> list[str]:
-    args = list(_AUDIO_CODECS[to_format])
-    s = settings or {}
-    if to_format == "mp3" or to_format == "aac" or to_format == "m4a" or to_format == "opus":
-        args += ["-b:a", str(s.get("bitrate", "192k"))]
-    elif to_format == "wav" or to_format == "aiff":
-        bits = str(s.get("bit_depth", "16"))
-        codec = "pcm_s24le" if bits == "24" else "pcm_s16le"
-        args[1] = codec
-    elif to_format == "flac":
-        args += ["-compression_level", str(int(s.get("compression", 5)))]
-    elif to_format == "ogg":
-        args += ["-q:a", str(int(s.get("quality", 6)))]
-    return args
+def _afilters(s: dict, eff: float) -> list[str]:
+    f = []
+    if _f(s, "volume_db"):
+        f.append(f"volume={_f(s, 'volume_db')}dB")
+    if s.get("normalize"):
+        f.append("loudnorm=I=-16:TP=-1.5:LRA=11")
+    if _f(s, "fade_in"):
+        f.append(f"afade=t=in:st=0:d={_f(s, 'fade_in')}")
+    if _f(s, "fade_out") and eff:
+        f.append(f"afade=t=out:st={max(0.0, eff - _f(s, 'fade_out')):.2f}:d={_f(s, 'fade_out')}")
+    return f
 
 
-def _video_filter(settings: dict) -> str | None:
-    s = settings or {}
-    parts: list[str] = []
-    width = int(s.get("width", 0) or 0)
-    if width > 0:
-        parts.append(f"scale={width}:-2")
-    fps = float(s.get("fps", 0) or 0)
-    if fps > 0:
-        parts.append(f"fps={fps}")
-    return ",".join(parts) or None
+def build(src: Path, dst: str, route: str, s: dict, out: Path, info: dict, notes: list[str]) -> tuple[list[str], float]:
+    total = float(info.get("duration") or 0)
+    start, end = _f(s, "trim_start"), _f(s, "trim_end")
+    length: float | None = None
+    if route == "ffmpeg_gif":
+        length = min(_f(s, "gif_duration", 10), 30.0)
+        if total:
+            length = min(length, max(0.1, total - start))
+    elif end > start:
+        length = end - start
+    elif start and total:
+        length = max(0.1, total - start)
+    eff = length or total
+
+    cmd = ["ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-protocol_whitelist", "file,pipe"]
+    if start > 0:
+        cmd += ["-ss", f"{start}"]
+    cmd += ["-i", str(src)]
+    if length:
+        cmd += ["-t", f"{length:.3f}"]
+
+    if route == "ffmpeg_audio":
+        if not info.get("has_audio"):
+            raise EngineError("no_audio_stream", "This file has no audio track.")
+        cmd += ["-vn", "-map", "0:a:0", "-map_metadata", "0" if s.get("tags", "keep") == "keep" else "-1"]
+        fl = _afilters(s, eff)
+        if fl:
+            cmd += ["-af", ",".join(fl)]
+        if str(s.get("sample_rate", "0")) != "0":
+            cmd += ["-ar", str(s["sample_rate"])]
+        if str(s.get("channels", "0")) != "0":
+            cmd += ["-ac", str(s["channels"])]
+        cmd += _audio_codec(dst, s)
+    elif route == "ffmpeg_gif":
+        if not info.get("has_video"):
+            raise EngineError("no_video_stream", "This file has no video track.")
+        colors, width = int(s.get("gif_colors", 256)), int(s.get("gif_width", 480))
+        dither = "bayer:bayer_scale=5" if s.get("gif_dither", True) else "none"
+        fc = (f"fps={int(s.get('gif_fps', 12))},scale=w='min({width},iw)':h=-2:flags=lanczos,split[a][b];"
+              f"[a]palettegen=max_colors={colors}:stats_mode=diff[p];[b][p]paletteuse=dither={dither}")
+        cmd += ["-an", "-filter_complex", fc, "-loop", "0" if s.get("gif_loop", "inf") == "inf" else "-1"]
+    else:  # ffmpeg_video
+        if not info.get("has_video"):
+            raise EngineError("no_video_stream", "This file has no video track.")
+        vf: list[str] = []
+        res, fps, rot = s.get("resolution", "original"), s.get("fps", "original"), str(s.get("rotate", "0"))
+        if res != "original":
+            vf.append(f"scale=-2:'min(ih,{res})'")
+        if fps != "original":
+            vf.append(f"fps={fps}")
+        vf += {"90": ["transpose=1"], "180": ["hflip", "vflip"], "270": ["transpose=2"]}.get(rot, [])
+        want_audio = bool(s.get("audio", True))
+        vok, aok = _COPY_OK[dst]
+        remux = (s.get("smart_mode", "auto") == "auto" and not vf and start == 0 and not length
+                 and info.get("vcodec") in vok and (not want_audio or not info.get("has_audio") or info.get("acodec") in aok))
+        cmd += ["-map", "0:v:0", "-map", "0:a:0?", "-map_metadata", "0"]
+        if not want_audio:
+            cmd += ["-an"]
+        ab = f"{s.get('audio_bitrate', 128)}k"
+        if remux:
+            cmd += ["-c", "copy"]
+            notes.append("Converted without re-encoding, so quality is unchanged and it was fast.")
+        else:
+            if dst in ("mp4", "mov", "mkv"):
+                vf.append("scale=trunc(iw/2)*2:trunc(ih/2)*2")
+                cmd += ["-c:v", "libx264", "-preset", s.get("preset", "medium"), "-crf", str(int(s.get("crf", 23))), "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", ab]
+            elif dst == "webm":
+                cpu = {"fast": "5", "medium": "3", "slow": "1"}[s.get("preset", "medium")]
+                cmd += ["-c:v", "libvpx-vp9", "-crf", str(int(s.get("crf", 32))), "-b:v", "0", "-row-mt", "1", "-cpu-used", cpu, "-pix_fmt", "yuv420p", "-c:a", "libopus", "-b:a", ab]
+            elif dst == "avi":
+                cmd += ["-c:v", "mpeg4", "-b:v", f"{int(s.get('video_bitrate', 2500))}k", "-vtag", "XVID", "-c:a", "libmp3lame", "-b:a", ab]
+            elif dst == "wmv":
+                cmd += ["-c:v", "wmv2", "-b:v", f"{int(s.get('video_bitrate', 2500))}k", "-c:a", "wmav2", "-b:a", ab]
+            if vf:
+                cmd += ["-vf", ",".join(vf)]
+        if dst in ("mp4", "mov") and s.get("faststart", True):
+            cmd += ["-movflags", "+faststart"]
+    cmd += ["-progress", "pipe:1", "-nostats", str(out)]
+    return cmd, eff
 
 
-async def _run_ffmpeg(
-    args: list[str],
-    progress: Callable[[float], None],
-    duration: float,
-    timeout: float,
-) -> None:
-    ffmpeg = _bin("ffmpeg")
-    full = [ffmpeg, "-hide_banner", "-nostdin", "-y",
-            "-protocol_whitelist", "file,pipe", *args]
-    proc = await asyncio.create_subprocess_exec(
-        *full, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-    )
-    progress(0.15)
-
-    async def watch() -> None:
-        assert proc.stdout is not None
-        while True:
-            line = await proc.stdout.readline()
-            if not line:
-                break
-            m = re.match(rb"out_time_ms=(\d+)", line.strip())
-            if m and duration > 0:
-                ms = int(m.group(1)) / 1_000_000
-                progress(0.15 + 0.75 * min(1.0, ms / duration))
-
-    try:
-        await asyncio.wait_for(watch(), timeout=timeout)
-        _, err = await asyncio.wait_for(proc.communicate(), timeout=30)
-    except asyncio.TimeoutError as exc:
-        proc.kill()
-        raise EngineError(f"ffmpeg timed out after {timeout:.0f}s") from exc
-    if proc.returncode != 0:
-        msg = (err or b"").decode(errors="replace")[-800:]
-        raise EngineError(f"ffmpeg failed: {msg}")
-
-
-async def _convert_async(ctx: JobContext, progress: Callable[[float], None]) -> Path:
-    src = ctx.input_path
-    dst = ctx.output_path
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    probe = await _probe(src)
-    duration = _duration(probe)
-    s = ctx.settings or {}
-    from_cat = "video" if ctx.from_format in VIDEO_SLUGS else "audio"
-    to_format = ctx.to_format
-
-    if from_cat == "audio" and to_format in AUDIO_SLUGS:
-        args = ["-i", str(src), "-vn", *_audio_args(to_format, s),
-                "-progress", "pipe:1", str(dst)]
-        await _run_ffmpeg(args, progress, duration, ctx.timeout_sec)
-        return dst
-
-    if from_cat == "video" and to_format in VIDEO_SLUGS:
-        vcodec, acodec = _VIDEO_CODECS[to_format]
-        vf = _video_filter(s)
-        args = ["-i", str(src), *vcodec,
-                "-crf", str(int(s.get("crf", 23))),
-                "-preset", str(s.get("preset", "medium")),
-                *acodec, "-b:a", "160k"]
-        if vf:
-            args += ["-vf", vf]
-        args += ["-progress", "pipe:1", str(dst)]
-        await _run_ffmpeg(args, progress, duration, ctx.timeout_sec)
-        return dst
-
-    if from_cat == "video" and to_format in AUDIO_SLUGS:
-        args = ["-i", str(src), "-vn", *_audio_args(to_format, s),
-                "-progress", "pipe:1", str(dst)]
-        await _run_ffmpeg(args, progress, duration, ctx.timeout_sec)
-        return dst
-
-    if from_cat == "video" and to_format == "gif":
-        # 2-pass palette (spec 3)
-        fps = int(s.get("fps", 15) or 15)
-        width = int(s.get("width", 480) or 480)
-        vf = f"fps={fps},scale={width}:-1:flags=lanczos"
-        palette = dst.parent / f"{dst.stem}.palette.png"
-        try:
-            args1 = ["-i", str(src), "-vf", f"{vf},palettegen", "-y", "-progress", "pipe:1", str(palette)]
-            await _run_ffmpeg(args1, lambda f: progress(f * 0.45), duration, ctx.timeout_sec / 2)
-            args2 = ["-i", str(src), "-i", str(palette),
-                     "-lavfi", f"{vf} [x]; [x][1:v] paletteuse",
-                     "-y", "-progress", "pipe:1", str(dst)]
-            await _run_ffmpeg(args2, lambda f: progress(0.45 + f * 0.45), duration, ctx.timeout_sec / 2)
-        finally:
-            palette.unlink(missing_ok=True)
-        return dst
-
-    raise EngineError(f"ffmpeg cannot handle {ctx.from_format} -> {to_format}")
-
-
-def run(ctx: JobContext, progress: Callable[[float], None]) -> Path:
-    # run_isolated executes this in a child process; the coroutine runs there.
-    return asyncio.run(_convert_async(ctx, progress))
+def run(src: Path, dst: str, route: str, s: dict, out: Path, notes: list[str]) -> None:
+    info = media_info(src)
+    if not info.get("valid"):
+        raise EngineError("corrupt_file", "This file could not be read. It may be damaged.")
+    cmd, eff = build(src, dst, route, s, out, info, notes)
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    assert proc.stdout is not None
+    for line in proc.stdout:
+        if line.startswith("out_time_us=") and eff:
+            try:
+                progress(5 + 90 * min(1.0, int(line.split("=")[1]) / 1e6 / eff))
+            except ValueError:
+                pass
+    err = proc.stderr.read() if proc.stderr else ""
+    if proc.wait() != 0 or not out.exists() or out.stat().st_size == 0:
+        code = "corrupt_file" if "Invalid data" in err or "moov atom" in err else "convert_failed"
+        raise EngineError(code, "The file could not be converted." + (" It may be damaged." if code == "corrupt_file" else ""))

@@ -1,48 +1,33 @@
-"""raw engine: rawpy (LibRaw) -> 8-bit sRGB -> vips encodes the target."""
-
+"""Camera RAW -> developed PNG with LibRaw (rawpy)."""
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable
 
-from app.engines.base import EngineNotAvailableError, EngineError, JobContext
-from app.engines import vips_engine
+import pyvips
+import rawpy
+
+from .common import EngineError
+
+_NOISE = {"off": rawpy.FBDDNoiseReductionMode.Off, "light": rawpy.FBDDNoiseReductionMode.Light, "full": rawpy.FBDDNoiseReductionMode.Full}
+_HL = {"clip": rawpy.HighlightMode.Clip, "blend": rawpy.HighlightMode.Blend, "recover": rawpy.HighlightMode.ReconstructDefault}
 
 
-def run(ctx: JobContext, progress: Callable[[float], None]) -> Path:
+def develop(src: Path, out_png: Path, s: dict, dst: str) -> Path:
+    bits = 16 if str(s.get("raw_bit_depth", "8")) == "16" and dst in ("png", "tiff") else 8
+    wb = s.get("raw_wb", "camera")
     try:
-        import rawpy
-    except ImportError as exc:
-        raise EngineNotAvailableError("rawpy (LibRaw) is not installed") from exc
-    if not vips_engine._HAS_VIPS:
-        raise EngineNotAvailableError("pyvips/libvips is not installed")
-    try:
-        import pyvips
-    except ImportError as exc:
-        raise EngineNotAvailableError("pyvips/libvips is not installed") from exc
-    progress(0.1)
-    try:
-        with rawpy.imread(str(ctx.input_path)) as raw:
-            # camera white balance, 8-bit sRGB output (spec 3)
+        with rawpy.imread(str(src)) as raw:
             rgb = raw.postprocess(
-                use_camera_wb=True,
-                output_bps=8,
-                output_color=rawpy.ColorSpace.sRGB,
-                no_auto_bright=False,
+                use_camera_wb=wb == "camera", use_auto_wb=wb == "auto",
+                bright=2 ** float(s.get("raw_brightness", 0)),
+                highlight_mode=_HL[s.get("raw_highlight", "clip")],
+                fbdd_noise_reduction=_NOISE[s.get("raw_noise", "off")],
+                output_bps=bits, no_auto_bright=False,
             )
-    except Exception as exc:
-        raise EngineError(f"cannot decode RAW file: {exc}") from exc
-    progress(0.5)
-    h, w, _ = rgb.shape
-    if w * h > 100_000_000:
-        raise EngineError("pixel_limit: image exceeds 100 megapixels")
-    tmp_png = ctx.output_path.with_suffix(".raw.png")
-    ctx.output_path.parent.mkdir(parents=True, exist_ok=True)
-    img = pyvips.Image.new_from_memory(rgb.tobytes(), w, h, 3, "uchar")
-    img.write_to_file(str(tmp_png))
-    progress(0.7)
-    out_img = vips_engine._load(tmp_png, "png")
-    vips_engine._save(out_img, ctx.output_path, ctx.to_format, ctx.settings)
-    tmp_png.unlink(missing_ok=True)
-    progress(0.9)
-    return ctx.output_path
+    except Exception as e:
+        raise EngineError("corrupt_file", "This RAW file could not be developed. It may be damaged or from an unsupported camera.") from e
+    h, w, bands = rgb.shape
+    img = pyvips.Image.new_from_memory(rgb.tobytes(), w, h, bands, "ushort" if bits == 16 else "uchar")
+    img = img.copy(interpretation="rgb16" if bits == 16 else "srgb")
+    img.pngsave(str(out_png), bitdepth=16 if bits == 16 else 8)
+    return out_png

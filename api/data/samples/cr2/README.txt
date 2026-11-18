@@ -1,1 +1,1 @@
-Drop one small real .cr2 sample file in this folder for the selfcheck (see README in repo root).
+Put ONE real cr2 file in this folder, then run the selfcheck again.

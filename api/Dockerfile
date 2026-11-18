@@ -1,58 +1,46 @@
-FROM python:3.12-slim AS base
+# Ubuntu 24.04 matches the environment this code was tested on (libvips 8.15, FFmpeg 6.1, libheif 1.17, Python 3.12).
+# Works on amd64 (your PC) and arm64 (Oracle Ampere) from the same file.
+FROM ubuntu:24.04
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    ROLE=both
+ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PATH="/opt/venv/bin:$PATH"
 
-# System deps: FFmpeg, libvips, libheif, LibRaw, Ghostscript, fonts.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        ffmpeg \
-        libvips-tools \
-        libvips-dev \
-        libheif-dev \
-        libraw-dev \
-        ghostscript \
-        fonts-dejavu-core \
-        curl \
-        ca-certificates \
-        gcc \
-    && rm -rf /var/lib/apt/lists/*
+  python3.12 \
+  python3.12-venv \
+  python3-pip \
+  python3.12-dev \
+  build-essential \
+  ffmpeg \
+  libvips42t64 \
+  libheif1 \
+  libheif-plugin-libde265 \
+  libheif-plugin-aomdec \
+  libheif-plugin-aomenc \
+  libheif-plugin-x265 \
+  libopenjp2-7 \
+  tini \
+  ca-certificates \
+  curl \
+  && rm -rf /var/lib/apt/lists/*
 
-# resvg (SVG render) + vtracer (raster->SVG) prebuilt binaries.
-RUN curl -fsSL -o /tmp/resvg.tar.gz \
-        https://github.com/RazrFalcon/resvg/releases/download/v0.45.1/resvg-linux-x86_64.tar.gz \
-    && tar -xzf /tmp/resvg.tar.gz -C /tmp \
-    && mv /tmp/resvg /usr/local/bin/resvg \
-    && chmod +x /usr/local/bin/resvg \
-    && rm -f /tmp/resvg.tar.gz \
-    && curl -fsSL -o /tmp/vtracer.tar.gz \
-        https://github.com/visioncortex/vtracer/releases/download/0.6.4/vtracer-x86_64-unknown-linux-musl.tar.gz \
-    && tar -xzf /tmp/vtracer.tar.gz -C /tmp \
-    && mv /tmp/vtracer /usr/local/bin/vtracer \
-    && chmod +x /usr/local/bin/vtracer \
-    && rm -f /tmp/vtracer.tar.gz
+RUN python3.12 -m venv /opt/venv
 
-WORKDIR /code
+WORKDIR /app
 
-# Python deps first (better layer caching).
-COPY pyproject.toml ./
-RUN pip install --upgrade pip && pip install .
+COPY requirements.txt .
 
-# App code.
-COPY alembic.ini ./
-COPY app ./app
-COPY migrations ./migrations
-COPY seed ./seed
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Non-root user + data dirs (spec 4.7).
-RUN useradd -m -u 10001 app \
-    && mkdir -p /data/uploads /data/jobs /data/samples \
-    && chown -R app:app /data /code
-USER app
+COPY . .
+
+RUN useradd -u 10001 -m qic && mkdir -p /data && chown -R qic:qic /data /app
+
+USER qic
+
+ENV DATA_DIR=/data
 
 EXPOSE 8000
 
-COPY entrypoint.sh /entrypoint.sh
-ENTRYPOINT ["/entrypoint.sh"]
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+HEALTHCHECK --interval=15s --timeout=5s --retries=5 CMD curl -fsS http://localhost:8000/v1/health || exit 1
+
+ENTRYPOINT ["tini", "--", "sh", "/app/docker-entrypoint.sh"]

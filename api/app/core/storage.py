@@ -1,40 +1,29 @@
-"""Local storage behind a small interface (swap for S3 later without touching callers)."""
-
+"""File storage behind a small interface. Local disk today, something else later."""
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
+from uuid import UUID
 
-from app.settings import settings
+from ..settings import get_settings
 
 
 class LocalStorage:
-    def __init__(self, base: str | Path | None = None) -> None:
-        self.base = Path(base or settings.data_dir)
+    def __init__(self, root: Path):
+        self.root = root.resolve()
 
-    def uploads_dir(self) -> Path:
-        p = self.base / "uploads"
-        p.mkdir(parents=True, exist_ok=True)
-        return p
+    def upload_dir(self, upload_id: UUID | str) -> Path:
+        return self.root / "uploads" / str(upload_id)
 
-    def jobs_dir(self) -> Path:
-        p = self.base / "jobs"
-        p.mkdir(parents=True, exist_ok=True)
-        return p
+    def job_dir(self, job_id: UUID | str) -> Path:
+        return self.root / "jobs" / str(job_id)
 
-    def samples_dir(self) -> Path:
-        p = self.base / "samples"
-        p.mkdir(parents=True, exist_ok=True)
-        return p
+    def remove(self, path: Path) -> None:
+        shutil.rmtree(path, ignore_errors=True)
 
-    def abs(self, rel_path: str) -> Path:
-        # rel paths never escape the base dir (no ".." tricks from DB rows)
-        p = (self.base / rel_path).resolve()
-        if self.base.resolve() not in p.parents and p != self.base.resolve():
-            raise ValueError("path escapes storage base")
-        return p
-
-    def rel(self, abs_path: Path) -> str:
-        return str(abs_path.resolve().relative_to(self.base.resolve()))
+    def free_bytes(self) -> int:
+        self.root.mkdir(parents=True, exist_ok=True)
+        return shutil.disk_usage(self.root).free
 
 
-storage = LocalStorage()
+storage = LocalStorage(get_settings().data_dir)

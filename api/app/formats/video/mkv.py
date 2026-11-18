@@ -1,37 +1,20 @@
-"""MKV format declaration — declares truth only, does no work."""
-from __future__ import annotations
-
-from app.formats.base import FormatSpec, _range, _sel
+"""MKV video."""
+from ..base import Flags, FormatSpec, PairSpec
+from ..fields import VIDEO_COMMON, VIDEO_TO_GIF, num, rng, CRF_H264, SPEED
+from ..groups import VIDEO, VIDEO_TO_AUDIO, plain
+from ..sniff import ebml
 
 SPEC = FormatSpec(
-    slug="mkv",
-    name="MKV",
-    category="video",
-    extensions=('mkv',),
-    mime="video/x-matroska",
-    magic=(
-        ((0, b'\x1aE\xdf\xa3'),),
-    ),
-    reader="ffmpeg",
-    writer="ffmpeg",
-    targets=(
-        "mp4",
-        "mov",
-        "avi",
-        "webm",
-        "wmv",
-        "mp3",
-        "wav",
-        "aac",
-        "m4a",
-        "ogg",
-        "gif"
-    ),
-    output_settings=(
-        _range("crf", "Quality (CRF)", 23, 18, 30, "Lower = better quality, bigger file"),
-        _sel("preset", "Speed preset", ("ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow"), "medium"),
-        _range("width", "Width (px, 0 = keep)", 0, 0, 3840),
-        _range("fps", "FPS (0 = keep)", 0, 0, 120),
-    ),
-    flags=(),
+    slug="mkv", name="MKV", category="video",
+    extensions=('mkv',), mime="video/x-matroska",
+    sniff=ebml(b'matroska'),
+    flags=Flags(lossy=True),
+    default_target="mp4", reader="ffmpeg", writer="ffmpeg",
+    targets={
+        **plain(*[s for s in VIDEO if s != "mkv"]),
+        **plain(*VIDEO_TO_AUDIO),
+        "gif": PairSpec(label="Animated GIF", settings=VIDEO_TO_GIF),
+    },
+    output_settings=VIDEO_COMMON + (SPEED, CRF_H264,),
+    tips=("MKV can hold many audio and subtitle tracks.",),
 )

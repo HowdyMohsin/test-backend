@@ -1,1 +1,1 @@
-Drop one small real .arw sample file in this folder for the selfcheck (see README in repo root).
+Put ONE real arw file in this folder, then run the selfcheck again.

@@ -1,33 +1,20 @@
-"""MP3 format declaration — declares truth only, does no work."""
-from __future__ import annotations
-
-from app.formats.base import FormatSpec, _sel
+"""MP3 audio."""
+from ..base import Flags, FormatSpec
+from ..fields import AUDIO_COMMON, BITRATES, num, rng, sel
+from ..groups import audio_targets
+from ..sniff import mp3
 
 SPEC = FormatSpec(
-    slug="mp3",
-    name="MP3",
-    category="audio",
-    extensions=('mp3',),
-    mime="audio/mpeg",
-    magic=(
-        ((0, b'ID3'),),
-        ((0, b'\xff\xfb'),),
-        ((0, b'\xff\xf3'),),
-        ((0, b'\xff\xf2'),),
-    ),
-    reader="ffmpeg",
-    writer="ffmpeg",
-    targets=(
-        "wav",
-        "flac",
-        "aac",
-        "ogg",
-        "m4a",
-        "opus",
-        "aiff"
-    ),
+    slug="mp3", name="MP3", category="audio",
+    extensions=('mp3',), mime="audio/mpeg",
+    sniff=mp3,
+    flags=Flags(lossy=True),
+    default_target="wav", reader="ffmpeg", writer="ffmpeg",
+    targets=audio_targets("mp3"),
     output_settings=(
-        _sel("bitrate", "Bitrate", ("128k", "192k", "256k", "320k"), "192k"),
-    ),
-    flags=("lossy",),
+        sel("mp3_mode", "Mode", [("cbr", "Constant bitrate"), ("vbr", "Variable quality (VBR)")], "cbr"),
+        sel("bitrate", "Bitrate", BITRATES, "192", show_if="mp3_mode=cbr"),
+        sel("vbr_quality", "VBR quality (0 = best)", [(str(i), str(i)) for i in range(10)], "2", show_if="mp3_mode=vbr"),
+    ) + AUDIO_COMMON,
+    tips=("MP3 plays on almost every device. 192 kbps is a good balance.",),
 )

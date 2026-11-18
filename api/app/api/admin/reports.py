@@ -1,124 +1,53 @@
-"""Admin: reports tab — daily/weekly/monthly conversion stats (spec 4.9)."""
-
 from __future__ import annotations
 
+import csv
+import io
+
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import desc, select, text
+from fastapi.responses import Response
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, require_tab
-from app.core.errors import APIError, ErrorCode
-from app.db.models import AdminUser
-from app.schemas import v1 as s
+from ...db.session import get_db
+from .deps import tab
 
-router = APIRouter()
-_guard = require_tab("reports")
+router = APIRouter(prefix="/reports", dependencies=[Depends(tab("reports"))])
 
 
-def _range_to_days(range_: str) -> int:
-    return {"day": 1, "week": 7, "month": 30}.get(range_, 7)
+async def _data(db: AsyncSession, days: int) -> dict:
+    p = {"d": days}
+    q = lambda sql: db.execute(text(sql), p)  # noqa: E731
+    daily = (await q("select ts::date, count(*) filter (where status='done'), count(*) filter (where status='failed'), count(*) filter (where status='blocked'), "
+                     "coalesce(sum(bytes_in),0), coalesce(sum(bytes_out),0) from events where ts > now() - make_interval(days => :d) group by 1 order by 1")).all()
+    pairs = (await q("select pair_slug, count(*) filter (where status='done'), count(*) filter (where status='failed') from events "
+                     "where ts > now() - make_interval(days => :d) and status in ('done','failed') group by 1 order by 2 desc limit 20")).all()
+    timing = (await q("select coalesce(avg(duration_ms),0), coalesce(percentile_cont(0.95) within group (order by duration_ms),0) from events "
+                      "where ts > now() - make_interval(days => :d) and status='done'")).one()
+    plans = (await q("select plan, count(*) from events where ts > now() - make_interval(days => :d) and status='done' group by 1")).all()
+    errors = (await q("select coalesce(error_code,'unknown'), count(*) from events where ts > now() - make_interval(days => :d) and status in ('failed','blocked') "
+                      "group by 1 order by 2 desc")).all()
+    engines = (await q("select route, count(*) filter (where status='done'), count(*) filter (where status='failed') from events "
+                       "where ts > now() - make_interval(days => :d) and status in ('done','failed') group by 1")).all()
+    return {"days": days,
+            "daily": [{"day": str(r[0]), "done": r[1], "failed": r[2], "blocked": r[3], "bytes_in": int(r[4]), "bytes_out": int(r[5])} for r in daily],
+            "top_pairs": [{"pair": r[0], "done": r[1], "failed": r[2]} for r in pairs],
+            "timing_ms": {"avg": round(timing[0]), "p95": round(timing[1])},
+            "plans": [{"plan": r[0], "count": r[1]} for r in plans],
+            "errors": [{"code": r[0], "count": r[1]} for r in errors],
+            "engines": [{"route": r[0], "done": r[1], "failed": r[2]} for r in engines]}
 
 
-@router.get("/reports/summary", response_model=list[s.ReportSummary])
-async def summary(
-    range: str = Query(default="week", max_length=8),
-    _admin: AdminUser = Depends(_guard),
-    db: AsyncSession = Depends(get_db),
-) -> list[s.ReportSummary]:
-    days = _range_to_days(range)
-    if range not in ("day", "week", "month"):
-        raise APIError(ErrorCode.BAD_REQUEST, "range must be day, week or month")
-    rows = (
-        await db.execute(
-            text(
-                """
-                SELECT day,
-                       SUM(conversions) AS conv,
-                       SUM(failed) AS fail,
-                       SUM(input_bytes) AS bytes
-                FROM event_daily
-                WHERE day > CURRENT_DATE - (:days || ' days')::interval
-                GROUP BY day ORDER BY day
-                """
-            ),
-            {"days": str(days)},
-        )
-    ).all()
-    return [
-        s.ReportSummary(
-            day=str(r[0]), conversions=int(r[1] or 0), failed=int(r[2] or 0),
-            input_mb=round((r[3] or 0) / (1024 * 1024), 2),
-        )
-        for r in rows
-    ]
+@router.get("")
+async def report(days: int = Query(7, ge=1, le=365), db: AsyncSession = Depends(get_db)):
+    return await _data(db, days)
 
 
-@router.get("/reports/pairs")
-async def by_pair(
-    range: str = Query(default="week", max_length=8),
-    limit: int = Query(default=20, le=100),
-    _admin: AdminUser = Depends(_guard),
-    db: AsyncSession = Depends(get_db),
-) -> list[dict]:
-    days = _range_to_days(range)
-    rows = (
-        await db.execute(
-            text(
-                """
-                SELECT pair_slug, SUM(conversions) AS conv, SUM(failed) AS fail
-                FROM event_daily
-                WHERE day > CURRENT_DATE - (:days || ' days')::interval
-                GROUP BY pair_slug ORDER BY conv DESC LIMIT :limit
-                """
-            ),
-            {"days": str(days), "limit": limit},
-        )
-    ).all()
-    return [{"pair": r[0], "conversions": int(r[1] or 0), "failed": int(r[2] or 0)} for r in rows]
-
-
-@router.get("/reports/plans")
-async def by_plan(
-    range: str = Query(default="week", max_length=8),
-    _admin: AdminUser = Depends(_guard),
-    db: AsyncSession = Depends(get_db),
-) -> list[dict]:
-    days = _range_to_days(range)
-    rows = (
-        await db.execute(
-            text(
-                """
-                SELECT plan_id, SUM(conversions) AS conv, SUM(failed) AS fail
-                FROM event_daily
-                WHERE day > CURRENT_DATE - (:days || ' days')::interval
-                GROUP BY plan_id ORDER BY conv DESC
-                """
-            ),
-            {"days": str(days)},
-        )
-    ).all()
-    return [{"plan": r[0], "conversions": int(r[1] or 0), "failed": int(r[2] or 0)} for r in rows]
-
-
-@router.get("/reports/audit")
-async def audit_log(
-    limit: int = Query(default=50, le=200),
-    offset: int = Query(default=0, ge=0),
-    _admin: AdminUser = Depends(_guard),
-    db: AsyncSession = Depends(get_db),
-) -> list[dict]:
-    from app.db.models import AuditLog
-
-    rows = (
-        await db.execute(
-            select(AuditLog).order_by(desc(AuditLog.created_at)).limit(limit).offset(offset)
-        )
-    ).scalars().all()
-    return [
-        {
-            "id": r.id, "admin_id": str(r.admin_id) if r.admin_id else None,
-            "action": r.action, "target": r.target, "details": r.details,
-            "ip": r.ip, "created_at": r.created_at.isoformat() if r.created_at else None,
-        }
-        for r in rows
-    ]
+@router.get("/export.csv")
+async def export(days: int = Query(30, ge=1, le=365), db: AsyncSession = Depends(get_db)):
+    d = await _data(db, days)
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["day", "converted", "failed", "blocked_by_limits", "bytes_in", "bytes_out"])
+    for r in d["daily"]:
+        w.writerow([r["day"], r["done"], r["failed"], r["blocked"], r["bytes_in"], r["bytes_out"]])
+    return Response(buf.getvalue(), media_type="text/csv", headers={"Content-Disposition": f"attachment; filename=report-{days}d.csv"})

@@ -1,41 +1,27 @@
-"""svg engine: resvg renders SVG -> PNG, then vips encodes the target."""
-
+"""SVG -> PNG with resvg. External resources are never loaded."""
 from __future__ import annotations
 
-import shutil
-import subprocess
+import tempfile
 from pathlib import Path
-from typing import Callable
 
-from app.engines.base import EngineNotAvailableError, EngineError, JobContext
-from app.engines import vips_engine
+import resvg_py
+
+from .common import EngineError
 
 
-def run(ctx: JobContext, progress: Callable[[float], None]) -> Path:
-    resvg = shutil.which("resvg")
-    if not resvg:
-        raise EngineNotAvailableError("resvg binary is not installed")
-    if not vips_engine._HAS_VIPS:
-        raise EngineNotAvailableError("pyvips/libvips is not installed")
-    tmp_png = ctx.output_path.with_suffix(".svg-render.png")
-    ctx.output_path.parent.mkdir(parents=True, exist_ok=True)
-    # render at a sane width; resvg keeps aspect ratio
-    width = int(ctx.settings.get("render_width", 2048) or 2048)
-    progress(0.1)
+def render(src: Path, out_png: Path, s: dict) -> Path:
+    kw: dict = {"svg_path": str(src), "dpi": float(s.get("svg_dpi", 96)), "skip_system_fonts": False}
+    width = int(s.get("svg_width") or 0)
+    if width:
+        kw["width"] = width
+    bg = s.get("svg_background", "transparent")
+    if bg and bg != "transparent":
+        kw["background"] = bg
     try:
-        subprocess.run(
-            [resvg, str(ctx.input_path), str(tmp_png), "-w", str(width)],
-            check=True,
-            capture_output=True,
-            timeout=max(30, ctx.timeout_sec / 2),
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise EngineError(f"resvg timed out: {exc}") from exc
-    except subprocess.CalledProcessError as exc:
-        raise EngineError(f"resvg failed: {exc.stderr.decode(errors='replace')[:500]}") from exc
-    progress(0.5)
-    img = vips_engine._load(tmp_png, "png")
-    vips_engine._save(img, ctx.output_path, ctx.to_format, ctx.settings)
-    tmp_png.unlink(missing_ok=True)
-    progress(0.9)
-    return ctx.output_path
+        with tempfile.TemporaryDirectory() as empty:
+            kw["resources_dir"] = empty
+            data = resvg_py.svg_to_bytes(**kw)
+    except Exception as e:  # resvg raises ValueError for bad input
+        raise EngineError("corrupt_file", "This SVG could not be read.") from e
+    out_png.write_bytes(data)
+    return out_png

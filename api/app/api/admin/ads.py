@@ -1,45 +1,37 @@
-"""Admin: ads tab — manage ad slots shown to free users."""
-
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import audit, get_db, require_tab
-from app.db.models import AdminUser, AdSlot
-from app.schemas import v1 as s
+from ...core.errors import ApiError
+from ...db.models import AdminUser, AdSlot
+from ...db.session import get_db
+from .deps import audit, tab
 
-router = APIRouter()
-_guard = require_tab("ads")
-
-
-@router.get("/ads", response_model=list[s.AdSlotSchema])
-async def list_slots(
-    _admin: AdminUser = Depends(_guard), db: AsyncSession = Depends(get_db)
-) -> list[s.AdSlotSchema]:
-    rows = (await db.execute(select(AdSlot).order_by(AdSlot.id))).scalars().all()
-    return [s.AdSlotSchema(id=r.id, code=r.code or "", enabled=r.enabled) for r in rows]
+router = APIRouter(prefix="/ads", dependencies=[Depends(tab("ads"))])
 
 
-@router.patch("/ads/{slot_id}", response_model=s.AdSlotSchema)
-async def update_slot(
-    slot_id: str,
-    body: s.AdSlotUpdate,
-    request: Request,
-    admin: AdminUser = Depends(_guard),
-    db: AsyncSession = Depends(get_db),
-) -> s.AdSlotSchema:
-    slot = await db.get(AdSlot, slot_id)
-    if slot is None:
-        # slots are created on demand so the frontend never 404s
-        slot = AdSlot(id=slot_id)
-        db.add(slot)
-    if body.code is not None:
-        slot.code = body.code[:20000]
-    if body.enabled is not None:
-        slot.enabled = body.enabled
+@router.get("")
+async def list_ads(db: AsyncSession = Depends(get_db)):
+    rows = (await db.execute(select(AdSlot).order_by(AdSlot.key))).scalars()
+    return {"slots": [{"key": r.key, "label": r.label, "enabled": r.enabled, "code": r.code} for r in rows],
+            "rules": ["Ads are shown to Anonymous and Free users only. Pro users never see ads.",
+                      "There is no slot inside the converter tool or between upload and download, and none can be added here."]}
+
+
+class AdIn(BaseModel):
+    enabled: bool
+    code: str = ""
+
+
+@router.put("/{key}")
+async def update_ad(key: str, body: AdIn, admin: AdminUser = Depends(tab("ads")), db: AsyncSession = Depends(get_db)):
+    r = await db.get(AdSlot, key)
+    if r is None:
+        raise ApiError("not_found", "Ad slot not found.", 404)
+    await audit(db, admin, "ad.update", key, {"enabled": r.enabled}, {"enabled": body.enabled})
+    r.enabled, r.code = body.enabled, body.code[:20000]
     await db.commit()
-    await audit(db, admin, "ad.update", request, target=slot_id,
-                details=body.model_dump(exclude_none=True))
-    return s.AdSlotSchema(id=slot.id, code=slot.code or "", enabled=slot.enabled)
+    return {"ok": True}

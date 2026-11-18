@@ -1,118 +1,103 @@
-"""CLI: python -m app.cli <seed|selfcheck|create-admin|cleanup|formats-json>
-
-- seed: load plans.json + messages.json into the DB
-- selfcheck [--pair slug]: verify pairs (all 210 by default)
-- create-admin --email E --password P: create the first admin (owner)
-- cleanup: run the expired-file cleanup once
-- formats-json [--out PATH]: dump the registry snapshot for the frontend
-"""
-
+"""python -m app.cli <command>: seed | selfcheck | create-admin | cleanup | verify-registry"""
 from __future__ import annotations
 
 import argparse
 import asyncio
 import getpass
 import json
-import sys
 from pathlib import Path
 
-SEED_DIR = Path(__file__).resolve().parent.parent / "seed"
+from sqlalchemy import select
+
+from .db.models import AdminUser, AdSlot, FormatState, Message, Plan, Preset, SiteSetting
+from .db.session import SessionLocal
+from .formats import registry
+
+SEED = Path(__file__).resolve().parents[1] / "seed"
 
 
-async def cmd_seed() -> None:
-    from sqlalchemy import select
+async def _default_admin(db) -> None:
+    """Dev convenience: one admin so the panel opens right away. Never created outside ENV=dev."""
+    from argon2 import PasswordHasher
 
-    from app.db.models import AppSetting, Message, Plan
-    from app.db.session import SessionFactory
+    from .db.models import User
+    from .settings import get_settings
 
-    plans = json.loads((SEED_DIR / "plans.json").read_text())
-    messages = json.loads((SEED_DIR / "messages.json").read_text())
-    async with SessionFactory() as s:
-        async with s.begin():
-            for p in plans:
-                row = await s.get(Plan, p["id"])
-                if row is None:
-                    s.add(Plan(id=p["id"], name=p["name"], price_cents=p.get("price_cents", 0),
-                               limits=p.get("limits", {})))
-                else:
-                    row.name = p["name"]
-                    row.price_cents = p.get("price_cents", 0)
-                    row.limits = p.get("limits", {})
-            existing = {m.key for m in (await s.execute(select(Message))).scalars().all()}
-            for key, text in messages.items():
-                if key not in existing:
-                    s.add(Message(key=key, text=text))
-    print(f"seeded {len(plans)} plans, {len(messages)} messages")
-    await _seed_app_settings(s)
+    s = get_settings()
+    if not (s.default_admin_email and s.default_admin_password):
+        return
+    if s.env != "dev":
+        print("DEFAULT_ADMIN_* is ignored because ENV is not dev. Use create-admin instead.")
+        return
+    email = s.default_admin_email.strip().lower()
+    if not (await db.execute(select(AdminUser))).first():
+        db.add(AdminUser(email=email, password_hash=PasswordHasher().hash(s.default_admin_password), role="super_admin", tabs=[]))
+        print(f"Default admin created: {email}")
+    uid = f"dev:{email}"
+    if not (await db.execute(select(User).where(User.firebase_uid == uid))).scalar_one_or_none():
+        db.add(User(firebase_uid=uid, email=email, plan="pro"))  # the test login with this email gets Pro
 
 
-async def _seed_app_settings(session) -> None:
-    """Seed JSON app settings (site, presets, popular) only when missing,
-    so admin edits in the Settings tab are never overwritten."""
-    from app.db.models import AppSetting
-
-    seeds = {
-        "site": json.loads((SEED_DIR / "site.json").read_text()),
-        "presets": {"items": json.loads((SEED_DIR / "presets.json").read_text())},
-        "popular_pinned": json.loads((SEED_DIR / "popular.json").read_text()),
-    }
-    added = 0
-    async with session.begin():
-        for key, value in seeds.items():
-            if await session.get(AppSetting, key) is None:
-                session.add(AppSetting(key=key, value=value))
-                added += 1
-    if added:
-        print(f"seeded {added} app settings")
-
-
-async def cmd_selfcheck(pair: str | None) -> None:
-    from app.core.selfcheck import run_selfcheck
-
-    result = await run_selfcheck(pair)
-    print(f"total={result['total']} passed={result['passed']} "
-          f"failed={result['failed']} testing={result['testing']}")
-    for slug, res in result["results"].items():
-        if res["status"] != "live":
-            print(f"  [{res['status']}] {slug}: {res['detail'][:120]}")
-    if result["failed"]:
-        sys.exit(1)
-
-
-async def cmd_create_admin(email: str, password: str | None) -> None:
-    from sqlalchemy import select
-
-    from app.api.admin.auth import hash_password
-    from app.db.models import AdminUser
-    from app.db.session import SessionFactory
-
-    if not password:
-        password = getpass.getpass("admin password: ")
-    email = email.lower().strip()
-    async with SessionFactory() as s:
-        async with s.begin():
-            exists = (
-                await s.execute(select(AdminUser).where(AdminUser.email == email))
-            ).scalar_one_or_none()
-            if exists:
-                print("admin already exists")
-                return
-            s.add(AdminUser(email=email, password_hash=hash_password(password), role="owner"))
-    print(f"owner admin created: {email}")
+async def seed() -> None:
+    async with SessionLocal() as db:
+        plans = {p.id for p in (await db.execute(select(Plan))).scalars()}
+        by_id = {p.id: p for p in (await db.execute(select(Plan))).scalars()}
+        for p in json.loads((SEED / "plans.json").read_text()):
+            if p["id"] not in plans:
+                db.add(Plan(**p))
+            else:
+                by_id[p["id"]].sort = p["sort"]  # order is structure; limits and prices stay as the admin set them
+        msgs = {m.key for m in (await db.execute(select(Message))).scalars()}
+        for k, v in json.loads((SEED / "messages.json").read_text()).items():
+            if k not in msgs:
+                db.add(Message(key=k, locale="en", text=v))
+        pre = {(p.category, p.key) for p in (await db.execute(select(Preset))).scalars()}
+        for p in json.loads((SEED / "presets.json").read_text()):
+            if (p["category"], p["key"]) not in pre:
+                db.add(Preset(**p))
+        slots = {s.key for s in (await db.execute(select(AdSlot))).scalars()}
+        for s in json.loads((SEED / "ad_slots.json").read_text()):
+            if s["key"] not in slots:
+                db.add(AdSlot(**s))
+        sets = {s.key for s in (await db.execute(select(SiteSetting))).scalars()}
+        for k, v in {"maintenance_enabled": False, "maintenance_message": "", "announcement_text": "", "announcement_link": "",
+                     "announcement_expires": None, "public_stats_enabled": False, "retention_minutes": None}.items():
+            if k not in sets:
+                db.add(SiteSetting(key=k, value=v))
+        fs = {s.key for s in (await db.execute(select(FormatState))).scalars()}
+        for slug in registry.formats():
+            if slug not in fs:
+                db.add(FormatState(key=slug, kind="format", status="live"))
+        for slug in registry.pairs():
+            if slug not in fs:
+                db.add(FormatState(key=slug, kind="pair", status="testing"))
+        await _default_admin(db)
+        await db.commit()
+    print(f"Seeded. {len(registry.formats())} formats, {len(registry.pairs())} pairs (new pairs start in 'testing').")
 
 
-async def cmd_cleanup() -> None:
-    from app.core.worker import run_cleanup_once
+async def selfcheck(pairs: list[str] | None, concurrency: int) -> None:
+    from .core import selfcheck as sc
+    async with SessionLocal() as db:
+        r = await sc.run(db, pairs, concurrency)
+    print(f"\nTotal {r['total']}  passed {r['passed']}  failed {r['failed']}  skipped {r['skipped']}")
 
-    print(await run_cleanup_once())
+
+async def create_admin(email: str, password: str) -> None:
+    from argon2 import PasswordHasher
+    async with SessionLocal() as db:
+        if (await db.execute(select(AdminUser).where(AdminUser.email == email))).scalar_one_or_none():
+            print("That admin already exists.")
+            return
+        db.add(AdminUser(email=email, password_hash=PasswordHasher().hash(password), role="super_admin", tabs=[]))
+        await db.commit()
+    print(f"Super admin {email} created.")
 
 
-def cmd_formats_json(out: str) -> None:
-    from app.formats import registry
-
-    snap = registry.snapshot()
-    Path(out).write_text(json.dumps(snap, indent=2, default=str))
-    print(f"wrote {out} ({snap['pair_count']} pairs)")
+async def cleanup() -> None:
+    from .core.worker import janitor_once
+    await janitor_once()
+    print("Expired files and old events cleaned.")
 
 
 def main() -> None:
@@ -120,25 +105,33 @@ def main() -> None:
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("seed")
     sc = sub.add_parser("selfcheck")
-    sc.add_argument("--pair", default=None)
+    sc.add_argument("--pair", action="append", help="e.g. jpg-to-png (repeatable)")
+    sc.add_argument("--concurrency", type=int, default=2)
     ca = sub.add_parser("create-admin")
     ca.add_argument("--email", required=True)
-    ca.add_argument("--password", default=None)
+    ca.add_argument("--password", help="omit to be asked")
     sub.add_parser("cleanup")
-    fj = sub.add_parser("formats-json")
-    fj.add_argument("--out", default="formats.json")
-    args = ap.parse_args()
-
-    if args.cmd == "seed":
-        asyncio.run(cmd_seed())
-    elif args.cmd == "selfcheck":
-        asyncio.run(cmd_selfcheck(args.pair))
-    elif args.cmd == "create-admin":
-        asyncio.run(cmd_create_admin(args.email, args.password))
-    elif args.cmd == "cleanup":
-        asyncio.run(cmd_cleanup())
-    elif args.cmd == "formats-json":
-        cmd_formats_json(args.out)
+    sub.add_parser("verify-registry")
+    sub.add_parser("verify-engines")
+    a = ap.parse_args()
+    if a.cmd == "verify-engines":
+        from .core.engine_check import run
+        rows = run()
+        for name, ok, note in rows:
+            print(f"{'PASS' if ok else 'FAIL'}  {name}  {note}")
+        raise SystemExit(0 if all(ok or "HEIC encode" in n for n, ok, _ in rows) else 1)
+    if a.cmd == "verify-registry":
+        f, p = registry.formats(), registry.pairs()
+        print(f"{len(f)} formats, {len(p)} pairs")
+        raise SystemExit(0 if (len(f), len(p)) == (32, 210) else 1)
+    if a.cmd == "seed":
+        asyncio.run(seed())
+    elif a.cmd == "selfcheck":
+        asyncio.run(selfcheck(a.pair, a.concurrency))
+    elif a.cmd == "create-admin":
+        asyncio.run(create_admin(a.email, a.password or getpass.getpass("Password: ")))
+    elif a.cmd == "cleanup":
+        asyncio.run(cleanup())
 
 
 if __name__ == "__main__":

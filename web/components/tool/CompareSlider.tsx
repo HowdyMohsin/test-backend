@@ -1,57 +1,24 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
 
-/** Before/after image compare slider with zoom. */
-export function CompareSlider({ before, after, label }: { before: string; after: string; label: string }) {
-  const [position, setPosition] = useState(50);
-  const [zoom, setZoom] = useState(false);
-  const [width, setWidth] = useState(0);
-  const containerRef = useRef<HTMLDivElement>(null);
+import { useState } from "react";
 
-  useEffect(() => {
-    const element = containerRef.current;
-    if (!element) return;
-    const observer = new ResizeObserver(() => setWidth(element.clientWidth));
-    observer.observe(element);
-    setWidth(element.clientWidth);
-    return () => observer.disconnect();
-  }, []);
-
+/** Original on the left, converted on the right. The range input makes it work with keyboard and touch. */
+export function CompareSlider({ before, after }: { before: string; after: string }) {
+  const [pos, setPos] = useState(50);
   return (
-    <div>
-      <div
-        ref={containerRef}
-        className={`relative select-none overflow-hidden rounded-xl border border-border ${zoom ? "cursor-zoom-out" : "cursor-zoom-in"}`}
-        onClick={() => setZoom((value) => !value)}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element -- compare needs raw blob/download URLs */}
-        <img src={after} alt={label} className="block w-full" />
-        <div className="absolute inset-y-0 left-0 overflow-hidden" style={{ width: `${position}%` }}>
-          {/* eslint-disable-next-line @next/next/no-img-element -- compare needs raw blob/download URLs */}
-          <img
-            src={before}
-            alt="Original"
-            className="block h-full max-w-none object-cover"
-            style={width ? { width: `${width}px` } : undefined}
-          />
-        </div>
-        <div className="absolute inset-y-0" style={{ left: `${position}%` }}>
-          <div className="h-full w-0.5 -translate-x-1/2 bg-white shadow" />
-        </div>
-        <input
-          type="range"
-          min={0}
-          max={100}
-          value={position}
-          onChange={(event) => setPosition(Number(event.target.value))}
-          className="compare-range"
-          aria-label="Compare original and converted"
-          onClick={(event) => event.stopPropagation()}
-        />
-        <span className="absolute left-2 top-2 rounded bg-text/70 px-2 py-0.5 text-xs text-background">Before</span>
-        <span className="absolute right-2 top-2 rounded bg-text/70 px-2 py-0.5 text-xs text-background">After</span>
+    <div className="relative select-none overflow-hidden rounded-xl border border-line bg-[repeating-conic-gradient(var(--surface-2)_0%_25%,var(--surface)_0%_50%)] bg-[length:16px_16px]">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={after} alt="Converted result" className="block max-h-[420px] w-full object-contain" />
+      <div className="absolute inset-0" style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={before} alt="Original file" className="block max-h-[420px] w-full object-contain" />
       </div>
-      <p className="mt-1 text-xs text-text-muted">Drag the slider to compare · click image to zoom</p>
+      <div className="pointer-events-none absolute inset-y-0 w-0.5 bg-white shadow" style={{ left: `${pos}%` }}>
+        <span className="absolute left-1/2 top-1/2 grid size-8 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white text-xs font-bold text-slate-700 shadow-md">⇆</span>
+      </div>
+      <span className="pointer-events-none absolute left-2 top-2 rounded-md bg-slate-900/70 px-2 py-0.5 text-xs font-semibold text-white">Original</span>
+      <span className="pointer-events-none absolute right-2 top-2 rounded-md bg-slate-900/70 px-2 py-0.5 text-xs font-semibold text-white">Converted</span>
+      <input type="range" min={0} max={100} value={pos} onChange={(e) => setPos(Number(e.target.value))} aria-label="Compare original and converted" className="absolute inset-0 h-full w-full cursor-ew-resize opacity-0" />
     </div>
   );
 }

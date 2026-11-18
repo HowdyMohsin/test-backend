@@ -1,1 +1,1 @@
-Drop one small real .orf sample file in this folder for the selfcheck (see README in repo root).
+Put ONE real orf file in this folder, then run the selfcheck again.

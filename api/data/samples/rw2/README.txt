@@ -1,1 +1,1 @@
-Drop one small real .rw2 sample file in this folder for the selfcheck (see README in repo root).
+Put ONE real rw2 file in this folder, then run the selfcheck again.

@@ -1,256 +1,312 @@
-import { useCallback, useMemo, useRef, useState } from "react";
-import type { QueueFile, FilePatch } from "./useFileQueue";
-import { useJobPolling } from "./useJobPolling";
-import {
-  ApiError,
-  absoluteUrl,
-  cancelJob,
-  createJob,
-  createZip,
-  errorMessage,
-  uploadFile,
-} from "@/lib/api/client";
-import type { ApiPair } from "@/lib/api/generated";
+"use client";
 
-const MAX_CONCURRENT_UPLOADS = 3;
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { api, ApiError, downloadZip, uploadFile } from "@/lib/api/client";
+import { useApp } from "@/lib/app-context";
+import { bytes, extOf } from "@/lib/format";
+import { renderMessage } from "@/lib/messages";
+import { defaultsOf } from "@/lib/showif";
+import type { Category, Field, FileInfo, JobStatus, SettingValues } from "@/lib/types";
+import { useSavedSettings } from "./useSavedSettings";
 
-export interface ConverterActions {
-  converting: boolean;
-  zipping: boolean;
-  globalError: unknown;
-  quotaExhausted: boolean;
-  dismissGlobalError: () => void;
-  convertAll: () => Promise<void>;
-  retryOne: (id: string) => void;
-  cancelAll: () => void;
-  downloadAllZip: () => Promise<void>;
-}
+export type Notice = { reason: string; message: string };
+export type Stage = "uploading" | "ready" | "queued" | "converting" | "done" | "failed" | "cancelled";
+export type Item = {
+  id: string;
+  file: File;
+  stage: Stage;
+  uploadPct: number;
+  uploadId?: string;
+  detected?: string;
+  category?: Category;
+  info?: FileInfo;
+  targets?: string[];
+  to?: string;
+  jobId?: string;
+  progress: number;
+  queuePos: number | null;
+  result?: JobStatus;
+  error?: { code: string | null; message: string };
+  notes: string[];
+  previewUrl?: string;
+};
 
-/**
- * Orchestrates the per-file flow: added → uploading → queued →
- * converting → done/failed/cancelled. Max 3 concurrent uploads,
- * batched status polling, output size via HEAD on the download URL.
- */
-export function useConverter({
-  files,
-  updateFile,
-  pairs,
-  refreshMe,
-}: {
-  files: QueueFile[];
-  updateFile: (id: string, patch: FilePatch) => void;
-  pairs: ApiPair[] | null;
-  refreshMe: () => void;
-}): ConverterActions {
-  const [converting, setConverting] = useState(false);
-  const [zipping, setZipping] = useState(false);
-  const [globalError, setGlobalError] = useState<unknown>(null);
-  const [quotaExhausted, setQuotaExhausted] = useState(false);
-  const filesRef = useRef(files);
-  filesRef.current = files;
-  const pendingJobs = useRef(new Set<string>());
+const MB = 1024 * 1024;
+const BROWSER_IMAGE = /^image\/(jpeg|png|webp|avif|gif|svg\+xml)$/;
+const ACTIVE: Stage[] = ["uploading", "queued", "converting"];
 
-  const finishIfIdle = useCallback(() => {
-    if (pendingJobs.current.size === 0) {
-      setConverting(false);
-      refreshMe();
-    }
-  }, [refreshMe]);
+export function useConverter(opts: { lockedFrom?: string; lockedTo?: string }) {
+  const app = useApp();
+  const { catalog, me, plans, refreshMe, site } = app;
+  const [items, setItems] = useState<Item[]>([]);
+  const [globalTo, setGlobalTo] = useState<string | null>(opts.lockedTo ?? null);
+  const [namePattern, setNamePattern] = useState("{name}");
+  const saved = useSavedSettings();
+  const itemsRef = useRef<Item[]>([]);
+  itemsRef.current = items;
+  const aborts = useRef(new Map<string, AbortController>());
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const templates = useRef<Record<string, string>>({});
 
-  const activeJobIds = useMemo(
-    () =>
-      files
-        .filter((file) => file.jobId && (file.phase === "queued" || file.phase === "converting"))
-        .map((file) => file.jobId as string),
-    [files]
+  useEffect(() => {
+    api.plans().then((p) => (templates.current = p.messages)).catch(() => undefined);
+  }, []);
+
+  const patch = useCallback((id: string, change: Partial<Item>) => setItems((list) => list.map((i) => (i.id === id ? { ...i, ...change } : i))), []);
+  const planId = me?.plan.id ?? "anonymous";
+  const nextPlan = plans.find((p) => p.id === ({ anonymous: "free", free: "basic", basic: "pro" } as Record<string, string>)[planId]);
+
+  const pickTarget = useCallback(
+    (targets: string[], detected: string, current?: string | null): string | undefined => {
+      if (opts.lockedTo && targets.includes(opts.lockedTo)) return opts.lockedTo;
+      if (current && targets.includes(current)) return current;
+      const dflt = catalog?.formats.find((f) => f.slug === detected)?.default_target;
+      return dflt && targets.includes(dflt) ? dflt : targets[0];
+    },
+    [catalog, opts.lockedTo],
   );
 
-  useJobPolling(
-    activeJobIds,
-    converting,
-    useCallback(
-      async (jobs) => {
-        for (const job of jobs) {
-          const file = filesRef.current.find((candidate) => candidate.jobId === job.id);
-          if (!file) continue;
-          if (job.status === "done") {
-            let outputSize: number | null = null;
-            const url = absoluteUrl(job.download_url);
-            if (url) {
-              try {
-                const head = await fetch(url, { method: "HEAD" });
-                const length = head.headers.get("content-length");
-                outputSize = length ? Number.parseInt(length, 10) : null;
-              } catch {
-                outputSize = null;
-              }
-            }
-            updateFile(file.id, {
-              phase: "done",
-              progress: 100,
-              downloadUrl: job.download_url,
-              outputSize,
-              error: null,
-            });
-            pendingJobs.current.delete(job.id);
-          } else if (job.status === "failed") {
-            updateFile(file.id, {
-              phase: "failed",
-              error: job.error?.message ?? "Conversion failed.",
-            });
-            pendingJobs.current.delete(job.id);
-          } else if (job.status === "cancelled" || job.status === "expired") {
-            updateFile(file.id, { phase: "cancelled" });
-            pendingJobs.current.delete(job.id);
-          } else {
-            updateFile(file.id, {
-              phase: job.status === "processing" ? "converting" : "queued",
-              progress: job.progress ?? 0,
-              queuePosition: job.queue_position,
-            });
-          }
-        }
-        finishIfIdle();
-      },
-      [updateFile, finishIfIdle]
-    )
+  const handleLimitError = useCallback(
+    (err: ApiError): boolean => {
+      const reason: Record<string, string> = { quota_exceeded: "quota", file_too_large: "size", duration_limit: "duration", batch_too_large: "batch", plan_required: "plan", login_required: "login", maintenance: "info" };
+      if (!reason[err.code]) return false;
+      setNotice({ reason: reason[err.code], message: err.message });
+      return true;
+    },
+    [],
   );
 
-  const convertOne = useCallback(
-    async (queueFile: QueueFile) => {
+  const startUpload = useCallback(
+    async (item: Item) => {
+      const ctrl = new AbortController();
+      aborts.current.set(item.id, ctrl);
       try {
-        updateFile(queueFile.id, { phase: "uploading", progress: 0, error: null });
-        const upload = await uploadFile(queueFile.file, (percent) =>
-          updateFile(queueFile.id, { progress: percent })
-        );
-        const afterUpload = filesRef.current.find((file) => file.id === queueFile.id);
-        if (!afterUpload || afterUpload.phase === "cancelled") return;
-
-        const patch: FilePatch = {
-          uploadId: upload.upload_id,
-          phase: "queued",
-          progress: 100,
-        };
-        // Server magic-byte confirmation can differ from the extension guess.
-        if (upload.detected_format && upload.detected_format !== afterUpload.detectedFormat) {
-          patch.detectedFormat = upload.detected_format;
-          const validTargets = (pairs ?? [])
-            .filter((pair) => pair.from === upload.detected_format)
-            .map((pair) => pair.to);
-          if (afterUpload.target && !validTargets.includes(afterUpload.target)) {
-            patch.target = null;
-            patch.phase = "added";
-            patch.error = `Server detected ${upload.detected_format.toUpperCase()} — please choose a target format.`;
-            updateFile(queueFile.id, patch);
-            return;
-          }
-        }
-        updateFile(queueFile.id, patch);
-
-        const latest = filesRef.current.find((file) => file.id === queueFile.id);
-        const target = latest?.target;
-        if (!target) {
-          updateFile(queueFile.id, { phase: "added", error: "Choose a target format first." });
+        const res = await uploadFile(item.file, (pct) => patch(item.id, { uploadPct: pct }), ctrl.signal);
+        if (opts.lockedFrom && res.detected_format !== opts.lockedFrom) {
+          api.removeUpload(res.upload_id).catch(() => undefined);
+          patch(item.id, {
+            stage: "failed",
+            error: { code: "wrong_format", message: `This page converts ${opts.lockedFrom.toUpperCase()} files, but this file is ${res.detected_format.toUpperCase()}. Use the ${res.detected_format.toUpperCase()} converter instead.` },
+          });
           return;
         }
-        const job = await createJob(upload.upload_id, target, latest?.settings ?? {});
-        updateFile(queueFile.id, { jobId: job.job_id });
-        pendingJobs.current.add(job.job_id);
-      } catch (error) {
-        if (error instanceof ApiError && error.code === "quota_exhausted") {
-          setQuotaExhausted(true);
-        } else {
-          setGlobalError(error);
-        }
-        updateFile(queueFile.id, { phase: "failed", error: errorMessage(error) });
+        const to = pickTarget(res.targets, res.detected_format, globalTo);
+        patch(item.id, { stage: "ready", uploadPct: 100, uploadId: res.upload_id, detected: res.detected_format, category: res.category, info: res.info, targets: res.targets, to });
+        if (!opts.lockedTo && !globalTo && to) setGlobalTo(to);
+      } catch (e) {
+        if (e instanceof ApiError && e.code === "aborted") return;
+        const err = e instanceof ApiError ? e : new ApiError("network", "Upload failed. Please try again.", 0);
+        patch(item.id, { stage: "failed", error: { code: err.code, message: err.message } });
+        handleLimitError(err);
+      } finally {
+        aborts.current.delete(item.id);
       }
     },
-    [pairs, updateFile]
+    [globalTo, handleLimitError, opts.lockedFrom, opts.lockedTo, patch, pickTarget],
+  );
+
+  const addFiles = useCallback(
+    (incoming: File[]) => {
+      if (!incoming.length) return;
+      const maxBatch = me?.limits.max_batch ?? 1000;
+      const live = itemsRef.current.filter((i) => i.stage !== "failed" && i.stage !== "cancelled").length;
+      let room = Math.max(0, maxBatch - live);
+      const accepted: File[] = [];
+      let refusedBatch = false;
+      let sizeNotice: string | null = null;
+      const fresh: Item[] = [];
+      for (const file of incoming) {
+        const dup = itemsRef.current.some((i) => i.file.name === file.name && i.file.size === file.size && i.file.lastModified === file.lastModified);
+        if (dup) continue;
+        if (room <= 0) {
+          refusedBatch = true;
+          continue;
+        }
+        const cat = catalog?.formats.find((f) => f.extensions.includes(extOf(file.name)))?.category;
+        const limitMb = cat && me ? me.limits[`max_${cat}_mb` as "max_image_mb"] : undefined;
+        const base: Item = { id: crypto.randomUUID(), file, stage: "uploading", uploadPct: 0, progress: 0, queuePos: null, notes: [] };
+        if (BROWSER_IMAGE.test(file.type)) base.previewUrl = URL.createObjectURL(file);
+        if (limitMb && file.size > limitMb * MB) {
+          const msg = renderMessage(templates.current, "size_hit", planId, {
+            size: bytes(file.size),
+            max: bytes(limitMb * MB),
+            next_max: nextPlan ? bytes(nextPlan.limits[`max_${cat}_mb` as "max_image_mb"] * MB) : "",
+          });
+          fresh.push({ ...base, stage: "failed", error: { code: "file_too_large", message: msg || "This file is larger than your plan allows." } });
+          sizeNotice ??= msg;
+          continue;
+        }
+        room -= 1;
+        accepted.push(file);
+        fresh.push(base);
+      }
+      if (!fresh.length && !refusedBatch) return;
+      setItems((list) => [...list, ...fresh]);
+      fresh.filter((i) => i.stage === "uploading").forEach((i, n) => setTimeout(() => startUpload(i), n * 80));
+      if (sizeNotice) setNotice({ reason: "size", message: sizeNotice });
+      else if (refusedBatch) {
+        const msg = renderMessage(templates.current, "batch_hit", planId, { limit: maxBatch, next_limit: nextPlan?.limits.max_batch ?? "" });
+        setNotice({ reason: "batch", message: msg || `You can convert up to ${maxBatch} files at once.` });
+      }
+    },
+    [catalog, me, nextPlan, planId, startUpload],
+  );
+
+  const remove = useCallback((id: string) => {
+    const it = itemsRef.current.find((i) => i.id === id);
+    aborts.current.get(id)?.abort();
+    if (it?.uploadId && it.stage !== "queued" && it.stage !== "converting") api.removeUpload(it.uploadId).catch(() => undefined);
+    if (it?.jobId && (it.stage === "queued" || it.stage === "converting")) api.cancel(it.jobId).catch(() => undefined);
+    if (it?.previewUrl) URL.revokeObjectURL(it.previewUrl);
+    setItems((list) => list.filter((i) => i.id !== id));
+  }, []);
+
+  const clear = useCallback(() => {
+    itemsRef.current.forEach((i) => remove(i.id));
+    setGlobalTo(opts.lockedTo ?? null);
+  }, [opts.lockedTo, remove]);
+
+  const setTarget = useCallback((id: string, to: string) => patch(id, { to }), [patch]);
+  const chooseGlobalTarget = useCallback((to: string) => {
+    setGlobalTo(to);
+    setItems((list) => list.map((i) => (i.stage === "ready" && i.targets?.includes(to) ? { ...i, to } : i)));
+  }, []);
+
+  const fieldsFor = useCallback(
+    (from: string, to: string): Field[] => {
+      const src = catalog?.formats.find((f) => f.slug === from);
+      const dst = catalog?.formats.find((f) => f.slug === to);
+      const pair = catalog?.pairs.find((p) => p.from === from && p.to === to);
+      return [...(src?.input_settings ?? []), ...(pair?.settings_override ?? dst?.output_settings ?? [])];
+    },
+    [catalog],
+  );
+
+  const sendOne = useCallback(
+    async (it: Item, batchId: string): Promise<"ok" | "stop"> => {
+      if (!it.uploadId || !it.detected || !it.to) return "ok";
+      const fields = fieldsFor(it.detected, it.to);
+      const defaults = defaultsOf(fields);
+      const chosen = saved.store[it.to] ?? {};
+      const settings: SettingValues = {};
+      for (const f of fields) if (chosen[f.key] !== undefined && chosen[f.key] !== defaults[f.key]) settings[f.key] = chosen[f.key];
+      patch(it.id, { stage: "queued", error: undefined, notes: [] });
+      try {
+        const { job_id } = await api.convert({ upload_id: it.uploadId, to: it.to, settings, batch_id: batchId, name_pattern: namePattern });
+        patch(it.id, { jobId: job_id, stage: "queued" });
+        return "ok";
+      } catch (e) {
+        const err = e instanceof ApiError ? e : new ApiError("network", "Cannot reach the server.", 0);
+        if (["quota_exceeded", "batch_too_large", "plan_required", "login_required", "maintenance"].includes(err.code)) {
+          patch(it.id, { stage: "ready" });
+          handleLimitError(err);
+          return "stop";
+        }
+        patch(it.id, { stage: "failed", error: { code: err.code, message: err.message } });
+        return "ok";
+      }
+    },
+    [fieldsFor, handleLimitError, namePattern, patch, saved.store],
   );
 
   const convertAll = useCallback(async () => {
-    const todo = filesRef.current.filter(
-      (file) =>
-        (file.phase === "added" || file.phase === "failed") && file.target && !file.error
-    );
-    if (todo.length === 0 || converting) return;
-    setConverting(true);
-    setGlobalError(null);
-    setQuotaExhausted(false);
-    const queue = [...todo];
-    const workers = Array.from({ length: MAX_CONCURRENT_UPLOADS }, async () => {
-      while (queue.length > 0) {
-        const next = queue.shift();
-        if (next) await convertOne(next);
-      }
-    });
-    await Promise.all(workers);
-    finishIfIdle();
-  }, [converting, convertOne, finishIfIdle]);
+    if (site?.maintenance.enabled) return setNotice({ reason: "info", message: site.maintenance.message ?? "Conversions are paused for maintenance." });
+    setNotice(null);
+    const batchId = crypto.randomUUID();
+    for (const it of itemsRef.current.filter((i) => i.stage === "ready")) {
+      if ((await sendOne(it, batchId)) === "stop") break;
+    }
+  }, [sendOne, site]);
 
-  const retryOne = useCallback(
-    (id: string) => {
-      const file = filesRef.current.find((candidate) => candidate.id === id);
-      if (!file) return;
-      updateFile(id, {
-        phase: "added",
-        error: null,
-        jobId: null,
-        uploadId: null,
-        downloadUrl: null,
-        outputSize: null,
-        progress: 0,
-      });
-      void convertOne({ ...file, phase: "added", error: null });
+  const retry = useCallback(
+    async (id: string) => {
+      const it = itemsRef.current.find((i) => i.id === id);
+      if (!it) return;
+      if (!it.uploadId || it.error?.code === "upload_expired") {
+        patch(id, { stage: "uploading", uploadPct: 0, error: undefined });
+        return startUpload({ ...it, stage: "uploading" });
+      }
+      await sendOne(it, crypto.randomUUID());
     },
-    [convertOne, updateFile]
+    [patch, sendOne, startUpload],
   );
 
   const cancelAll = useCallback(() => {
-    const actives = filesRef.current.filter((file) =>
-      ["uploading", "queued", "converting"].includes(file.phase)
-    );
-    for (const file of actives) {
-      updateFile(file.id, { phase: "cancelled" });
-      if (file.jobId) {
-        pendingJobs.current.delete(file.jobId);
-        void cancelJob(file.jobId).catch(() => undefined);
+    for (const it of itemsRef.current) {
+      if (it.stage === "uploading") {
+        aborts.current.get(it.id)?.abort();
+        patch(it.id, { stage: "cancelled" });
+      } else if ((it.stage === "queued" || it.stage === "converting") && it.jobId) {
+        api.cancel(it.jobId).catch(() => undefined);
+        patch(it.id, { stage: "cancelled" });
       }
     }
-    setConverting(false);
-  }, [updateFile]);
+  }, [patch]);
 
-  const downloadAllZip = useCallback(async () => {
-    const done = filesRef.current.filter((file) => file.phase === "done" && file.jobId);
-    if (done.length < 2 || zipping) return;
-    setZipping(true);
-    try {
-      const zip = await createZip(done.map((file) => file.jobId as string));
-      const url = absoluteUrl(zip.download_url);
-      if (url) {
-        const anchor = document.createElement("a");
-        anchor.href = url;
-        anchor.download = "converted.zip";
-        document.body.appendChild(anchor);
-        anchor.click();
-        anchor.remove();
+  // Poll job status while anything is running.
+  const running = items.some((i) => (i.stage === "queued" || i.stage === "converting") && i.jobId);
+  useEffect(() => {
+    if (!running) return;
+    let stopped = false;
+    const tick = async () => {
+      const ids = itemsRef.current.filter((i) => (i.stage === "queued" || i.stage === "converting") && i.jobId).map((i) => i.jobId as string);
+      if (!ids.length) return;
+      try {
+        const { jobs } = await api.jobs(ids);
+        if (stopped) return;
+        const justDone = jobs.filter((j) => j.status === "done" && itemsRef.current.some((i) => i.jobId === j.id && i.stage !== "done" && i.stage !== "cancelled"));
+        setItems((list) =>
+          list.map((i) => {
+            const j = jobs.find((x) => x.id === i.jobId);
+            if (!j || i.stage === "cancelled") return i;
+            if (j.status === "done") return { ...i, stage: "done", progress: 100, result: j, notes: j.notes };
+            if (j.status === "failed" || j.status === "expired")
+              return { ...i, stage: "failed", error: { code: j.error?.code ?? "expired", message: j.error?.message ?? "This file expired. Please convert it again." } };
+            if (j.status === "cancelled") return { ...i, stage: "cancelled" };
+            return { ...i, stage: j.status === "processing" ? "converting" : "queued", progress: j.progress, queuePos: j.queue_position };
+          }),
+        );
+        if (justDone.length) afterSuccess();
+      } catch {
+        /* a missed poll is harmless; the next one catches up */
       }
-    } catch (error) {
-      setGlobalError(error);
-    } finally {
-      setZipping(false);
+    };
+    const timer = setInterval(tick, 1000);
+    tick();
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running]);
+
+  const afterSuccess = useCallback(() => {
+    refreshMe();
+  }, [refreshMe]);
+
+  // Warn before closing the tab while work is in progress.
+  const active = items.some((i) => ACTIVE.includes(i.stage));
+  useEffect(() => {
+    if (!active) return;
+    const h = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", h);
+    return () => window.removeEventListener("beforeunload", h);
+  }, [active]);
+
+  const doneItems = useMemo(() => items.filter((i) => i.stage === "done"), [items]);
+  const readyItems = useMemo(() => items.filter((i) => i.stage === "ready" && i.to), [items]);
+  const zip = useCallback(async () => {
+    try {
+      await downloadZip(doneItems.map((i) => i.jobId as string), "converted-files");
+    } catch (e) {
+      setNotice({ reason: "info", message: e instanceof ApiError ? e.message : "Could not create the ZIP file." });
     }
-  }, [zipping]);
+  }, [doneItems]);
 
   return {
-    converting,
-    zipping,
-    globalError,
-    quotaExhausted,
-    dismissGlobalError: () => setGlobalError(null),
-    convertAll,
-    retryOne,
-    cancelAll,
-    downloadAllZip,
+    notice, clearNotice: () => setNotice(null), items, addFiles, remove, clear, setTarget, globalTo, chooseGlobalTarget, namePattern, setNamePattern,
+    convertAll, retry, cancelAll, zip, doneItems, readyItems, active, saved, fieldsFor,
+    uploading: items.some((i) => i.stage === "uploading"),
+    running,
   };
 }

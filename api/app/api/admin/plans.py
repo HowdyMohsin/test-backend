@@ -1,77 +1,80 @@
-"""Admin: plans & messages tab."""
-
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+import json
+from pathlib import Path
+
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import audit, get_db, require_tab
-from app.core.errors import APIError, ErrorCode
-from app.db.models import AdminUser, Message, Plan
-from app.schemas import v1 as s
+from ...core import site
+from ...core.errors import ApiError
+from ...db.models import AdminUser, Message, Plan
+from ...db.session import get_db
+from .deps import audit, tab
 
-router = APIRouter()
-_guard = require_tab("plans")
-
-
-@router.get("/plans", response_model=list[s.PlanSchema])
-async def list_plans(
-    _admin: AdminUser = Depends(_guard), db: AsyncSession = Depends(get_db)
-) -> list[s.PlanSchema]:
-    plans = (await db.execute(select(Plan).order_by(Plan.price_cents))).scalars().all()
-    return [
-        s.PlanSchema(id=p.id, name=p.name, price_cents=p.price_cents, limits=dict(p.limits or {}))
-        for p in plans
-    ]
+router = APIRouter(prefix="/plans", dependencies=[Depends(tab("plans"))])
+SEED = Path(__file__).resolve().parents[3] / "seed"
+_LIMIT_KEYS = {"max_image_mb", "max_audio_mb", "max_video_mb", "max_batch", "daily_conversions", "max_video_minutes", "ads"}
 
 
-@router.patch("/plans/{plan_id}", response_model=s.PlanSchema)
-async def update_plan(
-    plan_id: str,
-    body: s.PlanUpdate,
-    request: Request,
-    admin: AdminUser = Depends(_guard),
-    db: AsyncSession = Depends(get_db),
-) -> s.PlanSchema:
-    plan = await db.get(Plan, plan_id)
-    if plan is None:
-        raise APIError(ErrorCode.NOT_FOUND, "plan not found")
-    if body.name is not None:
-        plan.name = body.name[:64]
-    if body.price_cents is not None:
-        if body.price_cents < 0:
-            raise APIError(ErrorCode.BAD_REQUEST, "price cannot be negative")
-        plan.price_cents = body.price_cents
-    if body.limits is not None:
-        merged = dict(plan.limits or {})
-        merged.update(body.limits)
-        plan.limits = merged
+@router.get("")
+async def list_plans(db: AsyncSession = Depends(get_db)):
+    plans = (await db.execute(select(Plan).order_by(Plan.sort))).scalars()
+    msgs = (await db.execute(select(Message).order_by(Message.key))).scalars()
+    default = json.loads((SEED / "messages.json").read_text())
+    return {"plans": [{"id": p.id, "name": p.name, "price_cents": p.price_cents, "limits": p.limits} for p in plans],
+            "messages": [{"key": m.key, "text": m.text, "default": default.get(m.key, "")} for m in msgs],
+            "placeholders": ["{used}", "{limit}", "{reset_in}", "{size}", "{max}", "{next_limit}", "{next_max}", "{duration}"]}
+
+
+class PlanIn(BaseModel):
+    name: str
+    price_cents: int
+    limits: dict
+
+
+@router.put("/{plan_id}")
+async def update_plan(plan_id: str, body: PlanIn, admin: AdminUser = Depends(tab("plans")), db: AsyncSession = Depends(get_db)):
+    p = await db.get(Plan, plan_id)
+    if p is None:
+        raise ApiError("not_found", "Plan not found.", 404)
+    if set(body.limits) - _LIMIT_KEYS:
+        raise ApiError("invalid_request", "Unknown limit: " + ", ".join(sorted(set(body.limits) - _LIMIT_KEYS)), 422)
+    before = {"name": p.name, "price_cents": p.price_cents, "limits": p.limits}
+    p.name, p.price_cents, p.limits = body.name, max(0, body.price_cents), body.limits
+    await audit(db, admin, "plan.update", plan_id, before, body.model_dump())
     await db.commit()
-    await audit(db, admin, "plan.update", request, target=plan_id, details=body.model_dump(exclude_none=True))
-    return s.PlanSchema(id=plan.id, name=plan.name, price_cents=plan.price_cents, limits=dict(plan.limits or {}))
+    site.invalidate()
+    return {"ok": True}
 
 
-@router.get("/messages")
-async def list_messages(
-    _admin: AdminUser = Depends(_guard), db: AsyncSession = Depends(get_db)
-) -> dict[str, str]:
-    rows = (await db.execute(select(Message))).scalars().all()
-    return {m.key: m.text for m in rows}
+class MsgIn(BaseModel):
+    text: str
 
 
-@router.patch("/messages/{key}")
-async def update_message(
-    key: str,
-    body: s.MessageUpdate,
-    request: Request,
-    admin: AdminUser = Depends(_guard),
-    db: AsyncSession = Depends(get_db),
-) -> dict[str, str]:
-    msg = await db.get(Message, key)
-    if msg is None:
-        raise APIError(ErrorCode.NOT_FOUND, "message key not found")
-    msg.text = body.text[:2000]
+@router.put("/messages/{key}")
+async def update_message(key: str, body: MsgIn, admin: AdminUser = Depends(tab("plans")), db: AsyncSession = Depends(get_db)):
+    m = await db.get(Message, (key, "en"))
+    if m is None:
+        raise ApiError("not_found", "Message not found.", 404)
+    before = m.text
+    m.text = body.text.strip()[:600]
+    await audit(db, admin, "message.update", key, before, m.text)
     await db.commit()
-    await audit(db, admin, "message.update", request, target=key)
-    return {"key": key, "text": msg.text}
+    site.invalidate()
+    return {"ok": True}
+
+
+@router.post("/messages/{key}/reset")
+async def reset_message(key: str, admin: AdminUser = Depends(tab("plans")), db: AsyncSession = Depends(get_db)):
+    default = json.loads((SEED / "messages.json").read_text()).get(key)
+    m = await db.get(Message, (key, "en"))
+    if m is None or default is None:
+        raise ApiError("not_found", "No default for this message.", 404)
+    await audit(db, admin, "message.reset", key, m.text, default)
+    m.text = default
+    await db.commit()
+    site.invalidate()
+    return {"ok": True, "text": default}

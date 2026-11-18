@@ -1,154 +1,112 @@
+import { ArrowRightFromLine } from "lucide-react";
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AdSlot } from "@/components/ads/AdSlot";
+import { Breadcrumbs } from "@/components/pair/Breadcrumbs";
+import { FormatCard } from "@/components/pair/FormatCard";
+import { HowToSteps } from "@/components/pair/HowToSteps";
+import { PairFaq } from "@/components/pair/PairFaq";
+import { PairNotes } from "@/components/pair/PairNotes";
+import { RelatedPairs } from "@/components/pair/RelatedPairs";
+import { JsonLd } from "@/components/seo/JsonLd";
 import { ConverterTool } from "@/components/tool/ConverterTool";
-import RelatedPairs from "@/components/RelatedPairs";
-import {
-  PAIRS,
-  getFormat,
-  getPair,
-  pairDescription,
-  pairNotes,
-  pairTitle,
-  type Pair,
-} from "@/lib/formats";
+import { formatContent } from "@/content/formats";
+import { serverCatalog } from "@/lib/api/server";
+import { pairNotes } from "@/lib/notes";
+import { SITE_NAME, SITE_URL, pairDescription, pairTitle } from "@/lib/seo";
 
-export function generateStaticParams() {
-  return PAIRS.map((p) => ({ pair: p.slug }));
+export const revalidate = 300;
+type Params = Promise<{ pair: string }>;
+
+export async function generateStaticParams() {
+  return (await serverCatalog()).pairs.map((p) => ({ pair: p.slug }));
 }
 
-export async function generateMetadata({
-  params,
-}: {
-  params: { pair: string };
-}): Promise<Metadata> {
-  const p = getPair(params.pair);
-  if (!p) return {};
-  const title = `${pairTitle(p)} — Free Online`;
-  const description = pairDescription(p);
+async function load(slug: string) {
+  const catalog = await serverCatalog();
+  const pair = catalog.pairs.find((p) => p.slug === slug);
+  const src = catalog.formats.find((f) => f.slug === pair?.from);
+  const dst = catalog.formats.find((f) => f.slug === pair?.to);
+  if (!pair || !src || !dst) return null;
+  return { catalog, pair, src, dst };
+}
+
+export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
+  const data = await load((await params).pair);
+  if (!data) return { title: "Converter not available", robots: { index: false } };
+  const { src, dst, pair } = data;
   return {
-    title,
-    description,
-    alternates: { canonical: `/convert/${p.slug}` },
-    openGraph: { title, description, type: "website" },
+    title: pairTitle(src, dst),
+    description: pairDescription(src, dst),
+    alternates: { canonical: `/convert/${pair.slug}` },
+    openGraph: { title: pairTitle(src, dst), description: pairDescription(src, dst), url: `${SITE_URL}/convert/${pair.slug}` },
   };
 }
 
-function aboutParagraphs(p: Pair): string[] {
-  const from = getFormat(p.from);
-  const to = getFormat(p.to);
-  if (!from || !to) return [];
-  const p1 = `Convert ${from.name} to ${to.name} online for free — no signup, no watermark, nothing to install. Drop your file above, tune the output settings if you like, and download the result in seconds. The heavy lifting happens on our servers.`;
-  let p2: string;
-  if (p.to === "svg") {
-    p2 = `Vectorizing a ${from.name} means tracing it into clean vector shapes — infinitely scalable and tiny in file size. Flat graphics and logos trace beautifully; fine photographic detail won't survive tracing the same way, so check the result against your use case.`;
-  } else if (p.from === "pdf") {
-    p2 = `Every page of your PDF is rendered as a ${to.name} image at the DPI you choose, and all pages are delivered together in a single ZIP file.`;
-  } else if (from.subgroup === "raw") {
-    p2 = `${from.name} files hold far more data than a JPEG. We develop the RAW sensor data with camera white balance into an 8-bit sRGB ${to.name} — the same starting point professional editors use.`;
-  } else if (from.category === "video" && to.category === "audio") {
-    p2 = `We pull the audio track out of your ${from.name} video and encode it as ${to.name}. The picture is dropped; the sound keeps its quality.`;
-  } else if (p.to === "gif") {
-    p2 = `Your ${from.name} becomes an animated GIF with an optimized 2-pass palette. Lower the frame rate or width above for a smaller file that still looks sharp.`;
-  } else if (from.category === "audio" && to.category === "audio") {
-    p2 = `Re-encode your audio to ${to.name} with full control over bitrate and quality. Lossless sources stay pristine; lossy ones are transcoded cleanly in one pass.`;
-  } else {
-    p2 = `Your ${to.name} is ready in seconds. Adjust quality, metadata and format-specific options above — every setting is applied server-side by our conversion engine.`;
-  }
-  return [p1, p2];
-}
-
-export default function PairPage({ params }: { params: { pair: string } }) {
-  const p = getPair(params.pair);
-  if (!p) notFound();
-  const from = getFormat(p.from);
-  const to = getFormat(p.to);
-  if (!from || !to) notFound();
-  const notes = pairNotes(p.from, p.to);
-  const about = aboutParagraphs(p);
-
-  const jsonld = {
-    "@context": "https://schema.org",
-    "@type": "WebApplication",
-    name: pairTitle(p),
-    url: `https://quickimgconvert.com/convert/${p.slug}`,
-    applicationCategory: "MultimediaApplication",
-    operatingSystem: "Any",
-    offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-  };
-  const crumbs = {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home", item: "https://quickimgconvert.com" },
-      {
-        "@type": "ListItem",
-        position: 2,
-        name: pairTitle(p),
-        item: `https://quickimgconvert.com/convert/${p.slug}`,
-      },
-    ],
-  };
+export default async function PairPage({ params }: { params: Params }) {
+  const data = await load((await params).pair);
+  if (!data) notFound();
+  const { catalog, pair, src, dst } = data;
+  const S = src.slug.toUpperCase();
+  const T = dst.slug.toUpperCase();
+  const sc = formatContent[src.slug];
+  const dc = formatContent[dst.slug];
+  const faqs = [...(sc?.faqs.slice(0, 2) ?? []), ...(dc?.faqs.slice(0, 2) ?? [])];
+  const related = [
+    ...catalog.pairs.filter((p) => p.from === src.slug && p.slug !== pair.slug).slice(0, 3),
+    ...catalog.pairs.filter((p) => p.to === dst.slug && p.slug !== pair.slug).slice(0, 3),
+  ];
+  const reverse = catalog.pairs.find((p) => p.from === dst.slug && p.to === src.slug);
+  const intro = `Add your ${S} files and download ${T} files in seconds.${dc?.bestFor ? ` ${dst.name} is best for ${dc.bestFor.charAt(0).toLowerCase()}${dc.bestFor.slice(1)}` : ""}`;
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6">
-      {/* breadcrumb */}
-      <nav aria-label="Breadcrumb" className="flex items-center gap-2 font-mono text-xs uppercase tracking-widest text-mist">
-        <Link href="/" className="transition-colors hover:text-acid">
-          Home
-        </Link>
-        <span aria-hidden>/</span>
-        <span className="text-paper">
-          {from.name} → {to.name}
-        </span>
-      </nav>
+    <>
+      <JsonLd data={{
+        "@context": "https://schema.org",
+        "@graph": [
+          { "@type": "BreadcrumbList", itemListElement: [
+            { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+            { "@type": "ListItem", position: 2, name: `${S} to ${T}`, item: `${SITE_URL}/convert/${pair.slug}` }] },
+          { "@type": "WebApplication", name: `${S} to ${T} converter`, url: `${SITE_URL}/convert/${pair.slug}`, applicationCategory: "MultimediaApplication",
+            operatingSystem: "Any", offers: { "@type": "Offer", price: "0", priceCurrency: "USD" }, publisher: { "@type": "Organization", name: SITE_NAME } },
+        ],
+      }} />
 
-      <div className="mt-6 flex flex-wrap items-center gap-3">
-        <h1 className="font-display text-4xl font-bold tracking-tight sm:text-5xl">
-          {from.name} <span className="text-acid">→</span> {to.name}
-        </h1>
-        {p.label && (
-          <span className="rounded-lg border border-iris/50 bg-iris/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-widest text-iris">
-            {p.label}
-          </span>
-        )}
-      </div>
-      <p className="mt-3 max-w-2xl leading-relaxed text-mist">{pairDescription(p)}</p>
-
-      <div className="mt-8">
-        <ConverterTool presetFrom={p.from} presetTo={p.to} />
-      </div>
-
-      {notes.length > 0 && (
-        <div className="mt-6 rounded-xl border border-cyanx/30 bg-cyanx/5 px-5 py-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyanx">
-            Good to know
-          </p>
-          <ul className="mt-2 space-y-1.5">
-            {notes.map((n) => (
-              <li key={n} className="text-sm leading-relaxed text-mist">
-                ✦ {n}
-              </li>
-            ))}
-          </ul>
+      <section className="relative overflow-hidden bg-primary text-white">
+        <div aria-hidden className="absolute -right-32 -top-44 size-[520px] rounded-full bg-white/10" />
+        <div className="relative mx-auto max-w-6xl px-4 pb-28 pt-8">
+          <Breadcrumbs light current={`${S} to ${T}`} />
+          <div className="mt-8 flex flex-wrap items-center justify-between gap-8">
+            <div className="max-w-2xl">
+              <h1 className="text-4xl font-extrabold leading-[1.05] tracking-tight text-balance sm:text-5xl">Convert {S} to {T} online</h1>
+              <p className="mt-4 text-lg text-white/85">{intro}</p>
+            </div>
+            <div className="flex items-center gap-4" aria-hidden>
+              <span className="grid size-24 place-items-center rounded-3xl bg-white text-xl font-extrabold text-primary shadow-xl">{S}</span>
+              <ArrowRightFromLine className="size-6 text-white/80" />
+              <span className="grid size-24 place-items-center rounded-3xl bg-navy text-xl font-extrabold text-white shadow-xl">{T}</span>
+            </div>
+          </div>
         </div>
-      )}
-
-      <section className="mt-10 space-y-4">
-        <h2 className="font-display text-xl font-bold tracking-tight">
-          About this conversion
-        </h2>
-        {about.map((para) => (
-          <p key={para.slice(0, 24)} className="leading-relaxed text-mist">
-            {para}
-          </p>
-        ))}
       </section>
 
-      <RelatedPairs slug={p.slug} />
+      <div className="relative z-10 mx-auto -mt-20 max-w-6xl px-4">
+        <ConverterTool lockedFrom={src.slug} lockedTo={dst.slug} />
+        {reverse && <p className="mt-4 text-sm text-muted">Need the other direction? <a className="font-bold text-primary hover:underline" href={`/convert/${reverse.slug}`}>{T} to {S}</a></p>}
+      </div>
 
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonld) }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(crumbs) }} />
-    </div>
+      <div className="mx-auto max-w-5xl space-y-14 px-4 pb-4 pt-16">
+        <HowToSteps from={S} to={T} />
+        <AdSlot slot="format_page_mid" />
+        <div className="grid gap-4 md:grid-cols-2">
+          <FormatCard format={src} content={sc} role="From" />
+          <FormatCard format={dst} content={dc} role="To" />
+        </div>
+        <PairNotes notes={pairNotes(src, dst, pair)} />
+        {faqs.length > 0 && <PairFaq items={faqs} title={`${S} to ${T}: common questions`} />}
+        <RelatedPairs pairs={related} from={src.slug} />
+      </div>
+      <AdSlot slot="below_faq" />
+    </>
   );
 }

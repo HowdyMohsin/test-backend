@@ -1,65 +1,88 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@import "@fontsource-variable/onest";
 
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+/* Design tokens. Components use these names only (bg-primary, text-muted ...), never raw colors.
+   primary and accent come from the live site (#1e40af, #3b82f6). */
 :root {
-  --font-display: ui-sans-serif, system-ui, sans-serif;
-  --font-sans: ui-sans-serif, system-ui, sans-serif;
+  --bg: #f4f7fc;
+  --surface: #ffffff;
+  --surface-2: #eaf0fa;
+  --ink: #0f172a;
+  --muted: #526480;
+  --line: #d8e1f0;
+  --primary: #1e40af;
+  --primary-hover: #1a3794;
+  --primary-ink: #ffffff;
+  --accent: #3b82f6;
+  --accent-soft: #e2ecff;
+  --success: #15803d;
+  --success-soft: #e3f5ea;
+  --warn: #a14a07;
+  --warn-soft: #fcefd9;
+  --danger: #b91c1c;
+  --danger-soft: #fde7e7;
+  color-scheme: light;
 }
-
-html {
+[data-theme="dark"] {
+  --bg: #0b1220;
+  --surface: #121b2f;
+  --surface-2: #19263f;
+  --ink: #e8eefc;
+  --muted: #9bafd2;
+  --line: #263759;
+  --primary: #3b82f6;
+  --primary-hover: #5b9aff;
+  --primary-ink: #06142e;
+  --accent: #60a5fa;
+  --accent-soft: #162b52;
+  --success: #4ade80;
+  --success-soft: #11301d;
+  --warn: #fbbf24;
+  --warn-soft: #3a2a0c;
+  --danger: #f87171;
+  --danger-soft: #3a1414;
   color-scheme: dark;
 }
 
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-ink: var(--primary-ink);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --font-sans: "Onest Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --radius-card: 16px;
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.05), 0 8px 24px -12px rgb(15 23 42 / 0.12);
+}
+
+html { scroll-behavior: smooth; }
 body {
-  background: #06070b;
-  color: #f2f5fa;
+  background: var(--bg);
+  color: var(--ink);
   font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+::selection { background: var(--accent-soft); }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 
-/* Slim scrollbars for tables/panels */
-.scroll-thin::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-.scroll-thin::-webkit-scrollbar-track {
-  background: transparent;
-}
-.scroll-thin::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.14);
-  border-radius: 8px;
-}
-
-/* Number inputs: hide spinners for a cleaner tool look */
-input[type="number"]::-webkit-outer-spin-button,
-input[type="number"]::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-input[type="number"] {
-  -moz-appearance: textfield;
-  appearance: textfield;
-}
-
-@keyframes pulse-dot {
-  0%,
-  100% {
-    opacity: 0.5;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-.pulse-dot {
-  animation: pulse-dot 2s ease-in-out infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-.spin {
-  animation: spin 0.9s linear infinite;
-}
+@keyframes fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.fade-up { animation: fade-up 0.35s ease both; }
+@keyframes pop { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: none; } }
+.pop { animation: pop 0.18s ease both; }

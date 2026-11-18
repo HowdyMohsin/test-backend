@@ -1,1 +1,16 @@
-[{"category":"image","id":"img-balanced","name":"Balanced","settings":{"quality":85}},{"category":"image","id":"img-web","name":"Web (small)","settings":{"quality":75,"strip_metadata":true}},{"category":"image","id":"img-max","name":"Max quality","settings":{"quality":95,"strip_metadata":false}},{"category":"image","id":"img-email","name":"Email (small)","settings":{"quality":70,"strip_metadata":true}},{"category":"audio","id":"aud-balanced","name":"Balanced","settings":{"bitrate":"192k"}},{"category":"audio","id":"aud-small","name":"Small","settings":{"bitrate":"128k"}},{"category":"audio","id":"aud-high","name":"High quality","settings":{"bitrate":"320k"}},{"category":"audio","id":"aud-voice","name":"Voice","settings":{"bitrate":"64k"}},{"category":"video","id":"vid-balanced","name":"Balanced","settings":{"crf":23}},{"category":"video","id":"vid-small","name":"Small","settings":{"crf":28}},{"category":"video","id":"vid-high","name":"High quality","settings":{"crf":20}},{"category":"video","id":"vid-web","name":"Web","settings":{"crf":23}}]
+[
+  {"category": "image", "key": "balanced", "label": "Balanced", "sort": 0, "settings": {"quality": 85}},
+  {"category": "image", "key": "web", "label": "Web (small)", "sort": 1, "settings": {"quality": 75, "resize_mode": "fit", "width": 1920, "height": 1920, "metadata": "strip_gps", "color_profile": "srgb"}},
+  {"category": "image", "key": "max", "label": "Max quality", "sort": 2, "settings": {"quality": 95, "metadata": "keep", "color_profile": "keep"}},
+  {"category": "image", "key": "email", "label": "Email (under 1 MB)", "sort": 3, "settings": {"target_size_kb": 1000, "resize_mode": "fit", "width": 1600, "height": 1600}},
+  {"category": "image", "key": "social", "label": "Social (1080 px)", "sort": 4, "settings": {"resize_mode": "fit", "width": 1080, "height": 1080, "quality": 85, "color_profile": "srgb"}},
+  {"category": "image", "key": "print", "label": "Print (300 DPI)", "sort": 5, "settings": {"dpi": 300, "quality": 95, "color_profile": "keep"}},
+  {"category": "audio", "key": "balanced", "label": "Balanced", "sort": 0, "settings": {"bitrate": "192"}},
+  {"category": "audio", "key": "small", "label": "Small", "sort": 1, "settings": {"bitrate": "128"}},
+  {"category": "audio", "key": "high", "label": "High quality", "sort": 2, "settings": {"bitrate": "320"}},
+  {"category": "audio", "key": "voice", "label": "Voice", "sort": 3, "settings": {"bitrate": "64", "channels": "1"}},
+  {"category": "video", "key": "balanced", "label": "Balanced", "sort": 0, "settings": {"resolution": "720", "crf": 23}},
+  {"category": "video", "key": "small", "label": "Small", "sort": 1, "settings": {"resolution": "480", "crf": 28}},
+  {"category": "video", "key": "high", "label": "High quality", "sort": 2, "settings": {"resolution": "1080", "crf": 20}},
+  {"category": "video", "key": "web", "label": "Web", "sort": 3, "settings": {"resolution": "720", "faststart": true}}
+]

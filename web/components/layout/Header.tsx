@@ -1,82 +1,49 @@
 "use client";
-import { useState } from "react";
+
+import { Menu, X } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
+import { useApp } from "@/lib/app-context";
+import { useAuth } from "@/lib/auth";
 import { Logo } from "./Logo";
-import { ThemeToggle } from "./ThemeToggle";
-import { AnnouncementBar } from "./AnnouncementBar";
-import { MobileMenu, type NavLink } from "./MobileMenu";
-import { AuthModal } from "@/components/auth/AuthModal";
-import { UserMenu } from "@/components/auth/UserMenu";
-import { useAuth } from "@/hooks/useAuth";
-import { isFirebaseConfigured } from "@/lib/firebase";
-import { Button } from "@/components/ui/Button";
 
-const LIVE = "https://quickimgconvert.com";
-
-const NAV_LINKS: NavLink[] = [
-  { href: "#convert", label: "Tool" },
-  { href: "#features", label: "Features" },
-  { href: `${LIVE}/blog`, label: "Blog" },
-  { href: `${LIVE}/about`, label: "About" },
-  { href: `${LIVE}/contact`, label: "Contact" },
+const nav = [
+  { href: "/#all", label: "Converters" },
+  { href: "/pricing", label: "Pricing" },
+  { href: "/history", label: "History" },
 ];
 
 export function Header() {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [authOpen, setAuthOpen] = useState(false);
-  const [authTab, setAuthTab] = useState<"signin" | "signup">("signin");
+  const [open, setOpen] = useState(false);
+  const { me } = useApp();
   const { user } = useAuth();
-  const authEnabled = isFirebaseConfigured();
-
-  const openAuth = (tab: "signin" | "signup") => {
-    setAuthTab(tab);
-    setAuthOpen(true);
-  };
-
   return (
-    <>
-      <AnnouncementBar />
-      <header className="sticky top-0 z-40 border-b border-border bg-surface/90 backdrop-blur">
-        <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
-          <Logo />
-          <nav className="hidden items-center gap-1 lg:flex" aria-label="Main">
-            {NAV_LINKS.map((link) => (
-              <Link
-                key={link.label}
-                href={link.href}
-                className="rounded-lg px-3 py-2 text-sm font-medium text-text-muted hover:bg-surface-raised hover:text-text"
-              >
-                {link.label}
-              </Link>
-            ))}
-          </nav>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            {authEnabled && !user && (
-              <>
-                <Button variant="ghost" size="sm" className="hidden sm:inline-flex" onClick={() => openAuth("signin")}>
-                  Sign in
-                </Button>
-                <Button size="sm" onClick={() => openAuth("signup")}>
-                  Create account
-                </Button>
-              </>
-            )}
-            <UserMenu />
-            <button
-              className="rounded-lg p-2 text-text-muted hover:bg-surface-raised lg:hidden"
-              onClick={() => setMenuOpen(true)}
-              aria-label="Open menu"
-            >
-              <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-          </div>
+    <header className="relative z-30 border-b border-line bg-white">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4">
+        <Logo />
+        <nav aria-label="Main" className="hidden items-center gap-1 md:flex">
+          {nav.map((n) => <Link key={n.href} href={n.href} className="rounded-lg px-3 py-2 text-sm font-semibold text-muted hover:bg-surface-2 hover:text-ink">{n.label}</Link>)}
+        </nav>
+        <div className="flex items-center gap-2">
+          {me && <span className="hidden rounded-lg bg-surface-2 px-2.5 py-1 text-xs font-bold tabular-nums text-muted lg:block" title="Conversions used today">{me.usage.used}/{me.usage.limit} today</span>}
+          {user ? (
+            <Link href="/account" className="flex items-center gap-2 rounded-xl border border-line bg-white py-1 pl-1 pr-3 text-sm font-bold hover:border-accent" aria-label="Your account">
+              <span className="grid size-7 place-items-center rounded-lg bg-primary text-xs font-extrabold uppercase text-primary-ink">{(user.email ?? "?").charAt(0)}</span>
+              <span className="hidden max-w-[130px] truncate sm:block">{user.email}</span>
+            </Link>
+          ) : (
+            <Link href="/account" className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-ink hover:bg-primary-hover">Sign in</Link>
+          )}
+          <button className="grid size-9 place-items-center rounded-xl hover:bg-surface-2 md:hidden" aria-label={open ? "Close menu" : "Open menu"} aria-expanded={open} onClick={() => setOpen(!open)}>
+            {open ? <X className="size-5" /> : <Menu className="size-5" />}
+          </button>
         </div>
-      </header>
-      <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} links={NAV_LINKS} />
-      {authEnabled && <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} initialTab={authTab} />}
-    </>
+      </div>
+      {open && (
+        <nav aria-label="Mobile" className="border-t border-line bg-white px-4 py-2 md:hidden">
+          {nav.map((n) => <Link key={n.href} href={n.href} onClick={() => setOpen(false)} className="block rounded-lg px-3 py-3 text-sm font-semibold hover:bg-surface-2">{n.label}</Link>)}
+        </nav>
+      )}
+    </header>
   );
 }

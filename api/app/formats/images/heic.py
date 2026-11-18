@@ -1,33 +1,14 @@
-"""HEIC format declaration — declares truth only, does no work."""
-from __future__ import annotations
-
-from app.formats.base import FormatSpec
+"""HEIC / HEIF (iPhone photos). Input only."""
+from ..base import Flags, FormatSpec
+from ..groups import plain
+from ..sniff import ftyp
 
 SPEC = FormatSpec(
-    slug="heic",
-    name="HEIC",
-    category="image",
-    extensions=('heic', 'heif'),
-    mime="image/heic",
-    magic=(
-        ((4, b'ftypheic'),),
-        ((4, b'ftypheix'),),
-        ((4, b'ftyphevc'),),
-        ((4, b'ftypheim'),),
-        ((4, b'ftypheis'),),
-        ((4, b'ftypmif1'),),
-    ),
-    reader="vips",
-    writer=None,
-    targets=(
-        "jpg",
-        "png",
-        "webp",
-        "avif",
-        "tiff"
-    ),
-    output_settings=(
-        
-    ),
-    flags=("lossy", "alpha",),
+    slug="heic", name="HEIC", category="image",
+    extensions=("heic", "heif"), mime="image/heic",
+    sniff=ftyp(b"heic", b"heix", b"hevc", b"hevx", b"heim", b"heis", b"mif1", b"msf1"),
+    flags=Flags(lossy=True, alpha=True),
+    default_target="jpg", reader="vips", writer=None,
+    targets=plain("jpg", "png", "webp", "avif", "tiff"),
+    tips=("HEIC is the default photo format on iPhones. Convert to JPG to open it anywhere.",),
 )

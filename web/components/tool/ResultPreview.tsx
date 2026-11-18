@@ -1,66 +1,47 @@
 "use client";
-import { Modal } from "@/components/ui/Modal";
+
+import { useApp } from "@/lib/app-context";
+import { absolute } from "@/lib/api/client";
+import { bytes, duration } from "@/lib/format";
+import type { Item } from "@/hooks/useConverter";
 import { CompareSlider } from "./CompareSlider";
-import { absoluteUrl } from "@/lib/api/client";
-import { formatBytes, savingsPercent } from "@/lib/bytes";
-import type { QueueFile } from "@/hooks/useFileQueue";
-import type { ApiFormat } from "@/lib/api/generated";
 
-/** Result preview modal: compare slider / player + size stats. */
-export function ResultPreview({
-  queueFile,
-  targetFormat,
-  onClose,
-}: {
-  queueFile: QueueFile | null;
-  targetFormat: ApiFormat | null | undefined;
-  onClose: () => void;
-}) {
-  if (!queueFile) return null;
-  const downloadUrl = absoluteUrl(queueFile.downloadUrl);
-  const category = targetFormat?.category ?? null;
-  const savings = queueFile.outputSize ? savingsPercent(queueFile.size, queueFile.outputSize) : null;
+const RENDERABLE = new Set(["jpg", "png", "webp", "avif", "gif", "svg"]);
 
+export function ResultPreview({ item }: { item: Item }) {
+  const { formatBy } = useApp();
+  const r = item.result;
+  const to = formatBy(item.to ?? "");
+  if (!r?.download_url || !to) return null;
+  const url = absolute(r.download_url);
+  const isZip = r.name?.endsWith(".zip");
+  const before = item.info;
+  const after = r.info;
   return (
-    <Modal open onClose={onClose} title={queueFile.name}>
-      {category === "image" && queueFile.thumbnailUrl && downloadUrl && (
-        <CompareSlider before={queueFile.thumbnailUrl} after={downloadUrl} label={queueFile.name} />
-      )}
-      {(category === "audio" || category === "video") && downloadUrl && (
-        <div>
-          {category === "video" ? (
-            <video src={downloadUrl} controls className="w-full rounded-xl" />
-          ) : (
-            <audio src={downloadUrl} controls className="w-full" />
-          )}
-        </div>
-      )}
-      {(!downloadUrl || !category) && <p className="text-sm text-text-muted">Preview is not available for this file.</p>}
-      <dl className="mt-4 grid grid-cols-3 gap-2 text-center">
-        <div className="rounded-lg bg-surface-raised p-2">
-          <dt className="text-[11px] text-text-muted">Before</dt>
-          <dd className="text-sm font-semibold text-text">{formatBytes(queueFile.size)}</dd>
-        </div>
-        <div className="rounded-lg bg-surface-raised p-2">
-          <dt className="text-[11px] text-text-muted">After</dt>
-          <dd className="text-sm font-semibold text-text">
-            {queueFile.outputSize ? formatBytes(queueFile.outputSize) : "—"}
-          </dd>
-        </div>
-        <div className="rounded-lg bg-surface-raised p-2">
-          <dt className="text-[11px] text-text-muted">Saved</dt>
-          <dd className="text-sm font-semibold text-success">{savings !== null ? `${savings}%` : "—"}</dd>
-        </div>
+    <div className="mt-3 space-y-3">
+      {isZip ? (
+        <p className="rounded-xl bg-surface-2 p-3 text-sm text-muted">Each page was saved as its own image. They are all inside the ZIP file.</p>
+      ) : to.category === "image" && RENDERABLE.has(to.slug) ? (
+        item.previewUrl ? <CompareSlider before={item.previewUrl} after={url} /> : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={url} alt="Converted result" className="max-h-[420px] w-full rounded-xl border border-line object-contain" />
+        )
+      ) : to.category === "audio" ? (
+        <audio controls src={url} className="w-full" />
+      ) : to.category === "video" && to.slug !== "gif" ? (
+        <video controls src={url} className="max-h-[420px] w-full rounded-xl bg-black" />
+      ) : null}
+      {to.category === "image" && !isZip && !item.previewUrl && <p className="text-xs text-muted">Your browser cannot show the original format, so only the result is shown.</p>}
+      <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-3">
+        <div><dt className="text-muted">Size</dt><dd className="font-semibold">{bytes(item.file.size)} → {r.size ? bytes(r.size) : "—"}</dd></div>
+        {before?.width && after?.width && <div><dt className="text-muted">Dimensions</dt><dd className="font-semibold">{before.width}×{before.height} → {after.width}×{after.height}</dd></div>}
+        {before?.duration ? <div><dt className="text-muted">Length</dt><dd className="font-semibold">{duration(before.duration)}</dd></div> : null}
       </dl>
-      {downloadUrl && (
-        <a
-          href={downloadUrl}
-          download={queueFile.name}
-          className="mt-4 inline-flex w-full items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-contrast hover:bg-primary-hover"
-        >
-          Download
-        </a>
+      {item.notes.length > 0 && (
+        <ul className="space-y-1 rounded-xl bg-accent-soft p-3 text-sm text-primary">
+          {item.notes.map((n) => <li key={n}>{n}</li>)}
+        </ul>
       )}
-    </Modal>
+    </div>
   );
 }

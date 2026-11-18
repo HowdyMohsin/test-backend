@@ -1,19 +1,15 @@
-import type { InputHTMLAttributes } from "react";
+import type { InputHTMLAttributes, SelectHTMLAttributes } from "react";
 
-export function Input({ className = "", ...props }: InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <input
-      className={`w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-ring/30 ${className}`}
-      {...props}
-    />
-  );
+const base = "h-10 w-full rounded-xl border border-line bg-surface px-3 text-sm text-ink placeholder:text-muted focus:border-accent";
+
+export function Input({ className = "", ...rest }: InputHTMLAttributes<HTMLInputElement>) {
+  return <input {...rest} className={`${base} ${className}`} />;
 }
 
-export function Field({ label, children }: { label: string; children: React.ReactNode }) {
+export function Select({ className = "", children, ...rest }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <label className="block">
-      <span className="mb-1 block text-xs font-medium text-text-muted">{label}</span>
+    <select {...rest} className={`${base} appearance-auto ${className}`}>
       {children}
-    </label>
+    </select>
   );
 }

@@ -1,32 +1,23 @@
-"""JPG format declaration — declares truth only, does no work."""
-from __future__ import annotations
-
-from app.formats.base import FormatSpec, PairSpec, _range, _color, _bool
+"""JPEG."""
+from ..base import Flags, FormatSpec
+from ..fields import IMAGE_COMMON, TARGET_SIZE, color, flag, rng, sel
+from ..groups import raster_targets
+from ..sniff import sig
 
 SPEC = FormatSpec(
-    slug="jpg",
-    name="JPG",
-    category="image",
-    extensions=('jpg', 'jpeg'),
-    mime="image/jpeg",
-    magic=(
-        ((0, b'\xff\xd8\xff'),),
+    slug="jpg", name="JPEG", category="image",
+    extensions=("jpg", "jpeg", "jpe", "jfif"), mime="image/jpeg",
+    sniff=sig(b"\xff\xd8\xff"),
+    flags=Flags(lossy=True),
+    default_target="png", reader="vips", writer="vips",
+    targets=raster_targets("jpg"),
+    output_settings=IMAGE_COMMON + (
+        color("background", "Background for transparent areas", "#ffffff", show_if="source.alpha"),
+        rng("quality", "Quality", 85, 1, 100),
+        TARGET_SIZE,
+        flag("progressive", "Progressive JPEG", False, level="advanced"),
+        sel("subsample", "Chroma subsampling", [("420", "4:2:0 (smaller)"), ("444", "4:4:4 (sharper colors)")], "420", level="advanced"),
+        flag("optimize", "Optimize Huffman tables", True, level="advanced"),
     ),
-    reader="vips",
-    writer="vips",
-    targets=(
-        "png",
-        "webp",
-        "avif",
-        "gif",
-        "tiff",
-        PairSpec(to="svg", label="Vectorized (traced)", engine="trace")
-    ),
-    output_settings=(
-        _range("quality", "Quality", 85, 1, 100, "Higher = bigger file, better look"),
-        _color("background", "Background color", "#ffffff", "Used when the source has transparency"),
-        _bool("strip_metadata", "Remove metadata (EXIF)"),
-        _bool("progressive", "Progressive JPEG"),
-    ),
-    flags=("lossy",),
+    tips=("JPEG is best for photos and works everywhere. It has no transparency.",),
 )

@@ -1,30 +1,17 @@
-"""ORF (Olympus RAW) format declaration — declares truth only, does no work."""
-from __future__ import annotations
-
-from app.formats.base import FormatSpec
+"""Olympus ORF camera RAW. Input only, developed with LibRaw (rawpy)."""
+from ..base import Flags, FormatSpec
+from ..groups import RAW_OUT, plain
+from ..raw_settings import RAW_INPUT
+from ..sniff import sig
 
 SPEC = FormatSpec(
-    slug="orf",
-    name="ORF (Olympus RAW)",
-    category="image",
-    subgroup="raw",
-    extensions=('orf',),
-    mime="image/x-olympus-orf",
-    magic=(
-        ((0, b'II*\x00'),),
-        ((0, b'MM\x00*'),),
-    ),
-    magic_group="tiff",
-    reader="raw",
-    writer=None,
-    targets=(
-        "jpg",
-        "png",
-        "webp",
-        "tiff"
-    ),
-    output_settings=(
-        
-    ),
-    flags=(),
+    slug="orf", name="Olympus ORF", category="image", subgroup="raw",
+    extensions=('orf',), mime="image/x-olympus-orf",
+    sniff=sig(b"IIRO", b"IIRS", b"MMOR"),
+    flags=Flags(lossy=False),
+    default_target="jpg", reader="raw", writer=None,
+    targets=plain(*RAW_OUT),
+    input_settings=RAW_INPUT,
+    tiff_family=False,
+    tips=("Camera RAW files are developed with the camera white balance by default.",),
 )

@@ -1,128 +1,75 @@
-"""Plan guard: every check happens BEFORE a conversion starts (spec 4.5)."""
-
+"""The plan check. It runs BEFORE any conversion work; a failure means nothing is converted."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import APIError, ErrorCode
-from app.core.quota import QuotaExceeded, reserve
-from app.db.models import FormatState, Message, Plan, User
-from app.formats import registry
-from app.formats.base import AUDIO_SLUGS, VIDEO_SLUGS
+from ..db.models import Upload
+from ..formats.base import Pair
+from ..settings import get_settings
+from . import catalog, events, quota, site
+from .auth import Identity
+from .errors import ApiError
+
+_TIER = {"anonymous": 0, "free": 0, "basic": 1, "pro": 2}
+_LIMIT_KEY = {"image": "max_image_mb", "audio": "max_audio_mb", "video": "max_video_mb"}
 
 
-@dataclass
-class Identity:
-    owner_key: str  # "user:<firebase_uid>" | "anon:<anon_id>"
-    tier: str  # anonymous | free | pro
-    user: User | None = None
+def max_bytes(ident: Identity, category: str) -> int:
+    return int(ident.plan.limits.get(_LIMIT_KEY[category], 0)) * 1024 * 1024
 
 
-async def _message(session: AsyncSession, key: str, **kw: object) -> str:
-    row = (await session.execute(select(Message).where(Message.key == key))).scalar_one_or_none()
-    text = row.text if row else key
-    try:
-        return text.format(**kw)
-    except Exception:
-        return text
+async def _next_plan(db: AsyncSession, pid: str):
+    return (await site.plans(db)).get(site.NEXT_PLAN.get(pid, ""))
 
 
-async def _plan_limits(session: AsyncSession, tier: str) -> dict:
-    plan = (await session.execute(select(Plan).where(Plan.id == tier))).scalar_one_or_none()
-    if plan is None and tier == "anonymous":
-        plan = (await session.execute(select(Plan).where(Plan.id == "free"))).scalar_one_or_none()
-    if plan is None:
-        raise APIError(ErrorCode.INTERNAL, "plan configuration missing")
-    return dict(plan.limits or {})
+async def check_upload(db: AsyncSession, ident: Identity, category: str, size: int, info: dict) -> None:
+    mx, pid = max_bytes(ident, category), ident.plan.id
+    if size > mx:
+        nxt = await _next_plan(db, pid)
+        nxt_max = site.fmt_size(int(nxt.limits.get(_LIMIT_KEY[category], 0)) * 1024 * 1024) if nxt else ""
+        raise ApiError("file_too_large", await site.msg(db, "size_hit", pid, size=site.fmt_size(size), max=site.fmt_size(mx), next_max=nxt_max), 413)
+    if category == "image" and (info.get("width") or 0) * (info.get("height") or 0) > get_settings().max_pixels:
+        raise ApiError("pixel_limit", f"This image is too large ({info['width']}x{info['height']} pixels).", 422)
+    if category == "video":
+        limit = int(ident.plan.limits.get("max_video_minutes", 0)) * 60
+        if limit and (info.get("duration") or 0) > limit:
+            nxt = await _next_plan(db, pid)
+            nxt_max = site.fmt_duration(int(nxt.limits.get("max_video_minutes", 0)) * 60) if nxt else ""
+            raise ApiError("duration_limit", await site.msg(db, "duration_hit", pid, duration=site.fmt_duration(info["duration"]),
+                                                            max=site.fmt_duration(limit), next_max=nxt_max), 413)
 
 
-async def _format_state(session: AsyncSession, key: str) -> FormatState | None:
-    return (await session.execute(select(FormatState).where(FormatState.key == key))).scalar_one_or_none()
+def timeout_for(category: str, size: int, info: dict) -> int:
+    mb, dur = size / 1e6, float(info.get("duration") or 0)
+    if category == "video":
+        return int(min(6 * 3600, 300 + 4 * dur + mb))
+    if category == "audio":
+        return int(120 + 0.5 * dur + mb)
+    return int(min(900, 120 + 2 * mb))
 
 
-async def check_pair_available(
-    session: AsyncSession, identity: Identity, pair_slug: str
-) -> None:
-    """Pair must exist, be visible, live, and allowed for this tier."""
-    try:
-        pair = registry.get_pair(pair_slug)
-    except KeyError as exc:
-        raise APIError(ErrorCode.PAIR_NOT_AVAILABLE, "this conversion is not offered") from exc
-
-    pair_state = await _format_state(session, f"pair:{pair_slug}")
-    if pair_state and (not pair_state.visible or pair_state.status != "live"):
-        raise APIError(ErrorCode.PAIR_NOT_AVAILABLE, "this conversion is not available right now")
-    if pair_state and identity.tier not in (pair_state.plans or []):
-        raise APIError(
-            ErrorCode.PLAN_REQUIRED,
-            await _message(session, "pro_only", tier=identity.tier),
-        )
-    # source and target formats must also be visible+live
-    for slug in (pair.from_format, pair.to_format):
-        st = await _format_state(session, slug)
-        if st and (not st.visible or st.status == "broken"):
-            raise APIError(ErrorCode.PAIR_NOT_AVAILABLE, "this conversion is not available right now")
-
-
-async def check_conversion(
-    session: AsyncSession,
-    identity: Identity,
-    *,
-    pair_slug: str,
-    size_bytes: int,
-    to_format: str,
-    video_seconds: float | None = None,
-    batch_n: int = 1,
-) -> dict:
-    """Full pre-conversion gate. Returns the plan limits used."""
-    if identity.user is not None and identity.user.banned:
-        raise APIError(ErrorCode.BANNED, "this account is banned")
-
-    await check_pair_available(session, identity, pair_slug)
-    limits = await _plan_limits(session, identity.tier)
-
-    is_video = to_format in VIDEO_SLUGS or video_seconds is not None
-    if to_format in VIDEO_SLUGS:
-        cap_mb = int(limits.get("video_mb", 500))
-    elif to_format in AUDIO_SLUGS:
-        cap_mb = int(limits.get("audio_mb", 200))
-    else:
-        cap_mb = int(limits.get("image_mb", 200))
-    if size_bytes > cap_mb * 1024 * 1024:
-        raise APIError(
-            ErrorCode.FILE_TOO_LARGE,
-            await _message(session, "size_hit", limit=f"{cap_mb} MB"),
-            {"limit_mb": cap_mb},
-        )
-
-    if is_video and video_seconds:
-        max_sec = float(limits.get("video_max_sec", 1800))
-        if video_seconds > max_sec:
-            raise APIError(
-                ErrorCode.FILE_TOO_LARGE,
-                await _message(session, "size_hit", limit=f"{int(max_sec // 60)} min video"),
-                {"limit_sec": max_sec},
-            )
-
-    batch_cap = int(limits.get("batch", 10))
-    if batch_n > batch_cap:
-        raise APIError(
-            ErrorCode.BATCH_TOO_LARGE,
-            await _message(session, "batch_hit", limit=batch_cap),
-            {"limit": batch_cap},
-        )
-
-    daily = int(limits.get("daily", 25))
-    try:
-        used = await reserve(session, identity.owner_key, daily)
-    except QuotaExceeded as exc:
-        raise APIError(
-            ErrorCode.QUOTA_EXCEEDED,
-            await _message(session, "quota_hit", used=exc.used, limit=exc.limit, reset_in="midnight UTC"),
-            {"used": exc.used, "limit": exc.limit},
-        ) from exc
-    await session.flush()
-    return {"limits": limits, "used": used, "daily": daily}
+async def check_convert(db: AsyncSession, ident: Identity, pair: Pair, upload: Upload, batch_id: UUID | None) -> None:
+    """Raises ApiError, or reserves one unit of today's quota (caller commits it with the job row)."""
+    pid, lim = ident.plan.id, ident.plan.limits
+    st = await catalog.states(db)
+    if not catalog.pair_live(st, pair):
+        raise ApiError("pair_not_available", await site.msg(db, "pair_unavailable", pid), 422)
+    lowest = min((_TIER.get(p, 2) for p in catalog.pair_plans(st, pair)), default=0)
+    if _TIER.get(pid, 0) < lowest:
+        raise ApiError("plan_required", "This conversion needs a paid plan. See the plans page.", 403)
+    await check_upload(db, ident, upload.category, upload.size, upload.info)
+    if batch_id:
+        n = (await db.execute(text("select count(*) from jobs where batch_id=:b and owner_key=:o"),
+                              {"b": batch_id, "o": ident.owner_key})).scalar_one()
+        if n >= int(lim.get("max_batch", 1)):
+            nxt = await _next_plan(db, pid)
+            raise ApiError("batch_too_large", await site.msg(db, "batch_hit", pid, limit=lim.get("max_batch"),
+                                                             next_limit=nxt.limits.get("max_batch") if nxt else ""), 429)
+    limit = int(lim.get("daily_conversions", 0))
+    if not await quota.reserve(db, ident.owner_key, limit):
+        used = await quota.used_today(db, ident.owner_key)
+        await events.record_block(pid, ident.owner_key, pair.slug, upload.category, "quota_exceeded")
+        raise ApiError("quota_exceeded", await site.msg(db, "quota_hit", pid, used=used, limit=limit), 429)

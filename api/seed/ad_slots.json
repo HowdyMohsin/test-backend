@@ -1,0 +1,5 @@
+[
+  {"key": "between_categories", "label": "Between Category blocks and Popular converters (Homepage)"},
+  {"key": "below_faq", "label": "Below the FAQ (Homepage and format pages)"},
+  {"key": "format_page_mid", "label": "Between How to convert and Format cards (format pages)"}
+]

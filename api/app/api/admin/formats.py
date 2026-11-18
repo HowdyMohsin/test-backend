@@ -1,94 +1,128 @@
-"""Admin: formats tab — list/toggle format & pair state, trigger selfcheck."""
-
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import asyncio
+from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import audit, get_db, require_tab
-from app.core.errors import APIError, ErrorCode
-from app.core.selfcheck import run_selfcheck
-from app.db.models import AdminUser, FormatState
-from app.formats import registry
-from app.schemas import v1 as s
+from ...core import selfcheck, site
+from ...core.errors import ApiError
+from ...core.samples import GEN, ROOT
+from ...db.models import AdminUser, FormatState, Preset, SelfcheckRun
+from ...db.session import SessionLocal, get_db
+from ...formats import registry
+from .deps import audit, tab
 
-router = APIRouter()
-_guard = require_tab("formats")
-
-
-@router.get("/formats", response_model=list[s.FormatStateSchema])
-async def list_states(
-    _admin: AdminUser = Depends(_guard), db: AsyncSession = Depends(get_db)
-) -> list[s.FormatStateSchema]:
-    rows = (await db.execute(select(FormatState))).scalars().all()
-    by_key = {r.key: r for r in rows}
-    out: list[s.FormatStateSchema] = []
-    for slug in registry.all_formats():
-        st = by_key.get(slug)
-        out.append(_schema(slug, st))
-    for pair in registry.all_pairs():
-        st = by_key.get(f"pair:{pair.slug}")
-        out.append(_schema(f"pair:{pair.slug}", st))
-    return out
+router = APIRouter(prefix="/formats", dependencies=[Depends(tab("formats"))])
+_RAW_NEEDS_FILE = {"cr2", "nef", "arw", "rw2", "orf", "pef", "raf"}
+_run: dict[str, Any] = {"running": False, "done": 0, "total": 0}
 
 
-def _schema(key: str, st: FormatState | None) -> s.FormatStateSchema:
-    if st is None:
-        return s.FormatStateSchema(key=key)
-    return s.FormatStateSchema(
-        key=key, visible=st.visible, plans=list(st.plans or []), status=st.status, note=st.note or ""
-    )
+def _has_sample(slug: str) -> bool:
+    exts = set(registry.formats()[slug].extensions)
+    d = ROOT / slug
+    if d.is_dir() and any(p.suffix.lstrip(".").lower() in exts for p in d.iterdir() if p.is_file()):
+        return True
+    return slug not in _RAW_NEEDS_FILE
 
 
-@router.patch("/formats/{key}", response_model=s.FormatStateSchema)
-async def update_state(
-    key: str,
-    body: s.FormatStateUpdate,
-    request: Request,
-    admin: AdminUser = Depends(_guard),
-    db: AsyncSession = Depends(get_db),
-) -> s.FormatStateSchema:
-    valid = set(registry.all_formats()) | {f"pair:{p.slug}" for p in registry.all_pairs()}
-    if key not in valid:
-        raise APIError(ErrorCode.NOT_FOUND, "unknown format or pair key")
-    st = (await db.execute(select(FormatState).where(FormatState.key == key))).scalar_one_or_none()
-    if st is None:
-        st = FormatState(key=key)
-        db.add(st)
-    if body.visible is not None:
-        st.visible = body.visible
-    if body.plans is not None:
-        allowed = {"anonymous", "free", "pro"}
-        if not set(body.plans) <= allowed:
-            raise APIError(ErrorCode.BAD_REQUEST, "plans must be a subset of anonymous/free/pro")
-        st.plans = body.plans
-    if body.status is not None:
-        if body.status not in ("live", "testing", "broken"):
-            raise APIError(ErrorCode.BAD_REQUEST, "status must be live, testing or broken")
-        st.status = body.status
-        st.last_check_at = datetime.now(timezone.utc)
-    if body.note is not None:
-        st.note = body.note[:2000]
+@router.get("")
+async def list_formats(db: AsyncSession = Depends(get_db)):
+    st = {s.key: s for s in (await db.execute(select(FormatState))).scalars()}
+    pairs = []
+    for p in registry.pairs().values():
+        s = st.get(p.slug)
+        pairs.append({"slug": p.slug, "from": p.src.slug, "to": p.dst.slug, "route": p.route, "label": p.label,
+                      "status": s.status if s else "testing", "visible": s.visible if s else True,
+                      "plans": s.plans if s else ["free", "pro"], "pinned": bool(s and s.pinned), "note": s.note if s else None,
+                      "last_check_at": s.last_check_at.isoformat() if s and s.last_check_at else None, "has_sample": _has_sample(p.src.slug)})
+    fm = [{"slug": f.slug, "name": f.name, "category": f.category, "subgroup": f.subgroup,
+           "visible": st[f.slug].visible if f.slug in st else True, "has_sample": _has_sample(f.slug)} for f in registry.formats().values()]
+    return {"formats": fm, "pairs": pairs}
+
+
+class StateIn(BaseModel):
+    key: str
+    visible: bool | None = None
+    status: str | None = None
+    plans: list[str] | None = None
+    pinned: bool | None = None
+    note: str | None = None
+
+
+@router.patch("/state")
+async def set_state(body: StateIn, admin: AdminUser = Depends(tab("formats")), db: AsyncSession = Depends(get_db)):
+    if body.key not in registry.pairs() and body.key not in registry.formats():
+        raise ApiError("not_found", "Unknown format or pair.", 404)
+    if body.status is not None and body.status not in ("live", "testing", "broken"):
+        raise ApiError("invalid_request", "Status must be live, testing or broken.", 422)
+    row = await db.get(FormatState, body.key) or FormatState(key=body.key, kind="pair" if "-to-" in body.key else "format")
+    before = {"visible": row.visible, "status": row.status, "plans": row.plans, "pinned": row.pinned}
+    for f in ("visible", "status", "plans", "pinned", "note"):
+        v = getattr(body, f)
+        if v is not None:
+            setattr(row, f, v)
+    db.add(row)
+    await audit(db, admin, "format.update", body.key, before, body.model_dump(exclude_none=True))
     await db.commit()
-    await audit(db, admin, "format_state.update", request, target=key, details=body.model_dump(exclude_none=True))
-    return _schema(key, st)
+    site.invalidate()
+    return {"ok": True}
 
 
-@router.post("/formats/selfcheck")
-async def trigger_selfcheck(
-    body: s.SelfcheckTrigger,
-    request: Request,
-    admin: AdminUser = Depends(_guard),
-    db: AsyncSession = Depends(get_db),
-) -> dict:
-    if body.pair:
+class CheckIn(BaseModel):
+    pairs: list[str] | None = None
+
+
+@router.post("/selfcheck")
+async def start_selfcheck(body: CheckIn, admin: AdminUser = Depends(tab("formats"))):
+    if _run["running"]:
+        raise ApiError("busy", "A check is already running.", 409)
+    chosen = body.pairs or list(registry.pairs())
+    _run.update(running=True, done=0, total=len(chosen))
+
+    async def job() -> None:
         try:
-            registry.get_pair(body.pair)
-        except KeyError as exc:
-            raise APIError(ErrorCode.NOT_FOUND, "unknown pair") from exc
-    result = await run_selfcheck(body.pair)
-    await audit(db, admin, "selfcheck.run", request, target=body.pair or "all")
-    return {"ok": True, **{k: v for k, v in result.items() if k != "results"}}
+            async with SessionLocal() as db:
+                await selfcheck.run(db, chosen, 2, log=lambda _m: _run.update(done=_run["done"] + 1))
+        finally:
+            _run["running"] = False
+
+    asyncio.create_task(job())
+    return {"started": True, "total": len(chosen)}
+
+
+@router.get("/selfcheck")
+async def selfcheck_status(db: AsyncSession = Depends(get_db)):
+    last = (await db.execute(select(SelfcheckRun).where(SelfcheckRun.finished_at.is_not(None)).order_by(SelfcheckRun.id.desc()).limit(1))).scalar_one_or_none()
+    return {"running": _run["running"], "done": _run["done"], "total": _run["total"],
+            "last": {"finished_at": last.finished_at.isoformat(), "total": last.total, "passed": last.passed, "failed": last.failed,
+                     "skipped": last.skipped} if last else None}
+
+
+class PresetIn(BaseModel):
+    label: str
+    settings: dict
+    enabled: bool = True
+    sort: int = 0
+
+
+@router.get("/presets")
+async def presets(db: AsyncSession = Depends(get_db)):
+    rows = (await db.execute(select(Preset).order_by(Preset.category, Preset.sort))).scalars()
+    return {"presets": [{"id": r.id, "category": r.category, "key": r.key, "label": r.label, "settings": r.settings, "enabled": r.enabled, "sort": r.sort} for r in rows]}
+
+
+@router.put("/presets/{preset_id}")
+async def update_preset(preset_id: int, body: PresetIn, admin: AdminUser = Depends(tab("formats")), db: AsyncSession = Depends(get_db)):
+    r = await db.get(Preset, preset_id)
+    if r is None:
+        raise ApiError("not_found", "Preset not found.", 404)
+    before = {"label": r.label, "settings": r.settings, "enabled": r.enabled}
+    r.label, r.settings, r.enabled, r.sort = body.label, body.settings, body.enabled, body.sort
+    await audit(db, admin, "preset.update", f"{r.category}/{r.key}", before, body.model_dump())
+    await db.commit()
+    site.invalidate()
+    return {"ok": True}

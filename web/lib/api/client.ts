@@ -1,184 +1,105 @@
-/**
- * Typed fetch wrapper for the FastAPI backend (section-12 contract).
- * Backend error codes/messages are surfaced as-is — never replaced.
- */
-import type {
-  AdsResponse,
-  FormatsResponse,
-  HealthResponse,
-  JobResponse,
-  MeResponse,
-  PlansResponse,
-  SettingValue,
-  SiteResponse,
-  UploadResponse,
-} from "./generated";
+import type { Catalog, HistoryResponse, JobStatus, Me, PlansResponse, SettingValues, SiteInfo, UploadResult } from "../types";
 
-export const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "http://localhost:8000";
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export class ApiError extends Error {
   code: string;
-  http: number;
-  constructor(http: number, code: string, message: string) {
+  status: number;
+  constructor(code: string, message: string, status: number) {
     super(message);
-    this.name = "ApiError";
-    this.http = http;
     this.code = code;
+    this.status = status;
   }
 }
 
-function isNetworkFailure(error: unknown): boolean {
-  return error instanceof TypeError;
+type HeaderProvider = () => Promise<Record<string, string>>;
+let authHeaders: HeaderProvider = async () => ({});
+export function setAuthHeaderProvider(fn: HeaderProvider): void {
+  authHeaders = fn;
 }
 
-async function parseError(response: Response): Promise<ApiError> {
-  let code = "request_failed";
-  let message = `Request failed (${response.status}).`;
+async function parseError(res: Response): Promise<ApiError> {
   try {
-    const body = (await response.json()) as {
-      error?: { code?: string; message?: string };
-    };
-    if (body?.error?.code) code = body.error.code;
-    if (body?.error?.message) message = body.error.message;
+    const body = await res.json();
+    return new ApiError(body.error?.code ?? "internal", body.error?.message ?? "Something went wrong.", res.status);
   } catch {
-    /* keep defaults */
-  }
-  return new ApiError(response.status, code, message);
-}
-
-export function authHeaders(): HeadersInit {
-  if (typeof window === "undefined") return {};
-  try {
-    const token = window.localStorage.getItem("qic_id_token");
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  } catch {
-    return {};
+    return new ApiError("network", "Something went wrong. Please try again.", res.status);
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  let response: Response;
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  let res: Response;
   try {
-    response = await fetch(`${API_BASE}${path}`, {
+    res = await fetch(`${API_BASE}/v1${path}`, {
       ...init,
-      headers: { "Content-Type": "application/json", ...authHeaders(), ...(init?.headers ?? {}) },
+      headers: { ...(init.body ? { "Content-Type": "application/json" } : {}), ...(await authHeaders()), ...init.headers },
     });
-  } catch (error) {
-    if (isNetworkFailure(error))
-      throw new ApiError(0, "api_unreachable", "Could not reach the conversion server. Is it running?");
-    throw error;
+  } catch {
+    throw new ApiError("network", "Cannot reach the server. Check your connection and try again.", 0);
   }
-  if (!response.ok) throw await parseError(response);
-  if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as T;
 }
 
-/* ------------------------------------------------------------------ */
+export const api = {
+  formats: () => request<Catalog>("/formats"),
+  plans: () => request<PlansResponse>("/plans"),
+  me: () => request<Me>("/me"),
+  site: () => request<SiteInfo>("/site"),
+  ads: () => request<{ slots: Record<string, string> }>("/ads"),
+  convert: (body: { upload_id: string; to: string; settings: SettingValues; batch_id: string; name_pattern: string }) =>
+    request<{ job_id: string }>("/convert", { method: "POST", body: JSON.stringify(body) }),
+  jobs: (ids: string[]) => request<{ jobs: JobStatus[] }>(`/jobs?ids=${ids.join(",")}`),
+  cancel: (id: string) => request<{ ok: boolean }>(`/jobs/${id}/cancel`, { method: "POST" }),
+  removeUpload: (id: string) => request<{ ok: boolean }>(`/uploads/${id}`, { method: "DELETE" }),
+  history: () => request<HistoryResponse>("/history"),
+  billingConfig: () => request<{ checkout_enabled: boolean }>("/billing/config"),
+  checkout: () => request<{ url: string }>("/billing/checkout", { method: "POST" }),
+  waitlist: (email: string, source: string, plan: string) =>
+    request<{ ok: boolean }>("/billing/waitlist", { method: "POST", body: JSON.stringify({ email, plan, source }) }),
+};
 
-export const getHealth = () => request<HealthResponse>("/v1/health");
+export function absolute(path: string): string {
+  return `${API_BASE}${path}`;
+}
 
-export const getSite = () => request<SiteResponse>("/v1/site");
-
-export const getFormats = () =>
-  request<FormatsResponse>("/v1/formats", { cache: "no-store" } as RequestInit);
-
-export const getPlans = () => request<PlansResponse>("/v1/plans");
-
-export const getMe = () => request<MeResponse>("/v1/me", { cache: "no-store" } as RequestInit);
-
-export const getAd = (slot: string) =>
-  request<AdsResponse>(`/v1/ads?slot=${encodeURIComponent(slot)}`);
-
-/** Upload with progress (fetch has no upload progress, so XHR is used). */
-export function uploadFile(
-  file: File,
-  onProgress: (percent: number) => void
-): Promise<UploadResponse> {
+export async function uploadFile(file: File, onProgress: (pct: number) => void, signal: AbortSignal): Promise<UploadResult> {
+  const headers = await authHeaders();
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${API_BASE}/v1/uploads`);
-    const headers = authHeaders();
-    for (const [key, value] of Object.entries(headers)) xhr.setRequestHeader(key, String(value));
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
-    };
+    for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
+    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(Math.round((e.loaded / e.total) * 100));
     xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          resolve(JSON.parse(xhr.responseText) as UploadResponse);
-        } catch {
-          reject(new ApiError(xhr.status, "bad_response", "Invalid server response."));
-        }
-      } else {
-        try {
-          const body = JSON.parse(xhr.responseText) as {
-            error?: { code?: string; message?: string };
-          };
-          reject(
-            new ApiError(
-              xhr.status,
-              body?.error?.code ?? "upload_failed",
-              body?.error?.message ?? "Upload failed."
-            )
-          );
-        } catch {
-          reject(new ApiError(xhr.status, "upload_failed", "Upload failed."));
-        }
+      try {
+        const body = JSON.parse(xhr.responseText);
+        if (xhr.status >= 200 && xhr.status < 300) resolve(body as UploadResult);
+        else reject(new ApiError(body.error?.code ?? "internal", body.error?.message ?? "Upload failed.", xhr.status));
+      } catch {
+        reject(new ApiError("network", "Upload failed. Please try again.", xhr.status));
       }
     };
-    xhr.onerror = () =>
-      reject(new ApiError(0, "api_unreachable", "Could not reach the conversion server."));
+    xhr.onerror = () => reject(new ApiError("network", "Cannot reach the server. Check your connection and try again.", 0));
+    xhr.onabort = () => reject(new ApiError("aborted", "Upload cancelled.", 0));
+    signal.addEventListener("abort", () => xhr.abort());
     const form = new FormData();
-    form.append("file", file);
+    form.append("file", file, file.name);
     xhr.send(form);
   });
 }
 
-export const deleteUpload = (uploadId: string) =>
-  request<{ ok: boolean }>(`/v1/uploads/${uploadId}`, { method: "DELETE" });
-
-export function createJob(
-  uploadId: string,
-  target: string,
-  settings: Record<string, SettingValue>
-): Promise<{ job_id: string }> {
-  return request<{ job_id: string }>("/v1/convert", {
+export async function downloadZip(jobIds: string[], name: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/v1/jobs/zip`, {
     method: "POST",
-    body: JSON.stringify({ upload_id: uploadId, to: target, settings }),
+    headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+    body: JSON.stringify({ job_ids: jobIds, name }),
   });
-}
-
-/** Batch status for polling — unknown ids are skipped server-side. */
-export function getJobs(jobIds: string[]): Promise<JobResponse[]> {
-  if (jobIds.length === 0) return Promise.resolve([]);
-  return request<JobResponse[]>(
-    `/v1/jobs?ids=${jobIds.map(encodeURIComponent).join(",")}`,
-    { cache: "no-store" } as RequestInit
-  );
-}
-
-export const getJob = (jobId: string) =>
-  request<JobResponse>(`/v1/jobs/${jobId}`, { cache: "no-store" } as RequestInit);
-
-export const cancelJob = (jobId: string) =>
-  request<{ ok: boolean }>(`/v1/jobs/${jobId}/cancel`, { method: "POST" });
-
-export function createZip(jobIds: string[]): Promise<{ download_url: string; expires_at: string }> {
-  return request<{ download_url: string; expires_at: string }>("/v1/jobs/zip", {
-    method: "POST",
-    body: JSON.stringify({ job_ids: jobIds }),
-  });
-}
-
-/** Backend's own words for an error — never replaced. */
-export function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  return "Something went wrong. Please try again.";
-}
-
-/** Absolute URL for a backend download path. */
-export function absoluteUrl(path: string | null): string | null {
-  if (!path) return null;
-  return path.startsWith("http") ? path : `${API_BASE}${path}`;
+  if (!res.ok) throw await parseError(res);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${name}.zip`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }

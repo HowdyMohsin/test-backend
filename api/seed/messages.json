@@ -1,1 +1,27 @@
-{"anon_teaser":"You've used {used} of {limit} free conversions. Create a free account for 25/day.","batch_hit":"Too many files at once (limit: {limit} per batch).","pro_only":"This conversion needs the Pro plan.","pro_usage":"Pro: {used} of {limit} conversions used today.","quota_hit":"Daily limit reached ({used}/{limit}). Resets {reset_in}. Upgrade to Pro for 2000/day.","size_hit":"File is too big for your plan (limit: {limit}). Upgrade to Pro for bigger files.","usage_light":"You've used {used} of {limit} conversions today."}
+{
+  "usage_light.anonymous": "{used}/{limit} free conversions used today. Resets in {reset_in}.",
+  "usage_light.free": "{used}/{limit} conversions used today. Resets in {reset_in}.",
+  "usage_light.pro": "{used} conversions today.",
+  "anon_teaser": "No sign-up needed: {limit} conversions per day. Sign in for {next_limit} per day.",
+  "pro_usage": "{used} conversions today.",
+  "quota_hit.anonymous": "You have used all {limit} free conversions for today. Sign in for {next_limit} per day. Resets in {reset_in}.",
+  "quota_hit.free": "You have used {used}/{limit} conversions today. Pro allows {next_limit} per day. Resets in {reset_in}.",
+  "quota_hit.pro": "You reached the daily limit of {limit} conversions. Resets in {reset_in}.",
+  "size_hit.anonymous": "This file is {size}. Without an account the limit is {max}. Sign in for up to {next_max}.",
+  "size_hit.free": "This file is {size}. Your plan allows up to {max}. Pro allows up to {next_max}.",
+  "size_hit.pro": "This file is {size}. The maximum is {max}.",
+  "batch_hit.anonymous": "You can convert up to {limit} files at once. Sign in for up to {next_limit}.",
+  "batch_hit.free": "You can convert up to {limit} files at once. Pro allows up to {next_limit}.",
+  "batch_hit.pro": "You can convert up to {limit} files at once.",
+  "duration_hit.anonymous": "This video is {duration} long. The limit is {max}. Sign in for longer videos.",
+  "duration_hit.free": "This video is {duration} long. Your plan allows up to {max}. Pro allows up to {next_max}.",
+  "duration_hit.pro": "This video is {duration} long. The maximum is {max}.",
+  "pair_unavailable": "This conversion is temporarily unavailable. Please try another format.",
+  "maintenance": "We are doing maintenance. Conversions are paused for a short while.",
+  "banned": "This account has been blocked.",
+  "usage_light.basic": "{used}/{limit} conversions used today. Resets in {reset_in}.",
+  "quota_hit.basic": "You reached the daily limit of {limit} conversions. Pro allows {next_limit} per day. Resets in {reset_in}.",
+  "size_hit.basic": "This file is {size}. Your plan allows up to {max}. Pro allows up to {next_max}.",
+  "batch_hit.basic": "You can convert up to {limit} files at once. Pro allows up to {next_limit}.",
+  "duration_hit.basic": "This video is {duration} long. Your plan allows up to {max}. Pro allows up to {next_max}."
+}

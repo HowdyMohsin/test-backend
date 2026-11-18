@@ -1,0 +1,124 @@
+export type Category = "image" | "audio" | "video";
+export type Option = { value: string; label: string };
+export type Field = {
+  key: string;
+  label: string;
+  type: "select" | "range" | "number" | "boolean" | "color" | "text";
+  default: string | number | boolean | null;
+  min: number | null;
+  max: number | null;
+  step: number | null;
+  options: Option[];
+  level: "basic" | "advanced";
+  group: string;
+  help: string;
+  show_if: string | null;
+};
+export type Flags = { lossy: boolean; alpha: boolean; animated: boolean; vector: boolean; multipage: boolean };
+export type FormatInfo = {
+  slug: string;
+  name: string;
+  category: Category;
+  subgroup: string | null;
+  extensions: string[];
+  mime: string;
+  flags: Flags;
+  default_target: string | null;
+  tips: string[];
+  can_read: boolean;
+  can_write: boolean;
+  input_settings: Field[];
+  output_settings: Field[];
+};
+export type PairInfo = {
+  slug: string;
+  from: string;
+  to: string;
+  label: string | null;
+  note: string | null;
+  plans: string[];
+  settings_override: Field[] | null;
+};
+export type Preset = { key: string; label: string; settings: Record<string, string | number | boolean> };
+export type Catalog = {
+  categories: { key: Category; label: string }[];
+  formats: FormatInfo[];
+  pairs: PairInfo[];
+  presets: Record<string, Preset[]>;
+  popular: string[];
+  counts: { formats: number; pairs: number };
+};
+export type Limits = {
+  max_image_mb: number;
+  max_audio_mb: number;
+  max_video_mb: number;
+  max_batch: number;
+  daily_conversions: number;
+  max_video_minutes: number;
+  ads: boolean;
+};
+export type PlanInfo = { id: string; name: string; price_cents: number; limits: Limits };
+export type PlansResponse = { plans: PlanInfo[]; messages: Record<string, string> };
+export type Me = {
+  plan: { id: string; name: string };
+  limits: Limits;
+  usage: { used: number; limit: number; resets_at: string };
+  banner: { kind: string; text: string };
+  user: { email: string | null } | null;
+};
+export type SiteInfo = {
+  maintenance: { enabled: boolean; message: string | null };
+  announcement: { text: string; link: string | null } | null;
+  public_counter: number | null;
+};
+export type FileInfo = {
+  width?: number;
+  height?: number;
+  has_alpha?: boolean;
+  animated?: boolean;
+  has_gps?: boolean;
+  has_exif?: boolean;
+  duration?: number;
+  has_video?: boolean;
+  has_audio?: boolean;
+  pages?: number;
+};
+export type UploadResult = {
+  upload_id: string;
+  detected_format: string;
+  category: Category;
+  size: number;
+  info: FileInfo;
+  targets: string[];
+  expires_at: string;
+};
+export type JobStatus = {
+  id: string;
+  status: "queued" | "processing" | "done" | "failed" | "cancelled" | "expired";
+  progress: number;
+  pair: string;
+  notes: string[];
+  queue_position: number | null;
+  download_url: string | null;
+  name: string | null;
+  size: number | null;
+  info: { width?: number; height?: number; duration?: number };
+  error: { code: string | null; message: string | null } | null;
+};
+export type SettingValues = Record<string, string | number | boolean>;
+export type HistoryItem = {
+  id: string;
+  pair: string;
+  from: string;
+  to: string;
+  status: "queued" | "processing" | "done" | "failed" | "cancelled" | "expired";
+  source_name: string | null;
+  name: string | null;
+  in_size: number | null;
+  out_size: number | null;
+  created_at: string;
+  finished_at: string | null;
+  download_url: string | null;
+  error: string | null;
+};
+export type HistoryResponse = { signed_in: boolean; items: HistoryItem[] };

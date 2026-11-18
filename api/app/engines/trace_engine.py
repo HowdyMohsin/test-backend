@@ -1,47 +1,44 @@
-"""trace engine: vtracer vectorizes raster -> SVG (spec 3: input capped at 2048px)."""
-
+"""Raster -> SVG tracing with vtracer. The result is a traced copy, never an exact one."""
 from __future__ import annotations
 
-import shutil
-import subprocess
 from pathlib import Path
-from typing import Callable
 
-from app.engines.base import EngineNotAvailableError, EngineError, JobContext
-from app.engines import vips_engine
+import pyvips
+import vtracer
+
+from .common import EngineError
+from .vips_engine import load
+
+PRESETS = {
+    "photo": dict(mode="spline", filter_speckle=4, color_precision=8, layer_difference=16, corner_threshold=60),
+    "logo": dict(mode="spline", filter_speckle=8, color_precision=6, layer_difference=32, corner_threshold=60),
+    "lineart": dict(mode="spline", filter_speckle=4, color_precision=6, layer_difference=16, corner_threshold=60, colormode="binary"),
+    "pixel": dict(mode="none", filter_speckle=0, color_precision=8, layer_difference=8, corner_threshold=60),
+}
 
 
-def run(ctx: JobContext, progress: Callable[[float], None]) -> Path:
-    vtracer = shutil.which("vtracer")
-    if not vtracer:
-        raise EngineNotAvailableError("vtracer binary is not installed")
-    if not vips_engine._HAS_VIPS:
-        raise EngineNotAvailableError("pyvips/libvips is not installed")
-    max_size = int(ctx.settings.get("max_size", 2048) or 2048)
-    color_mode = str(ctx.settings.get("color_mode", "color"))
-    progress(0.1)
-    img = vips_engine._load(ctx.input_path, ctx.from_format)
-    scale = min(1.0, max_size / max(img.width, img.height))
-    if scale < 1.0:
-        img = img.resize(scale)
-    tmp_png = ctx.output_path.with_suffix(".trace-in.png")
-    ctx.output_path.parent.mkdir(parents=True, exist_ok=True)
-    img.write_to_file(str(tmp_png))
-    progress(0.4)
-    args = [
-        vtracer,
-        "--input", str(tmp_png),
-        "--output", str(ctx.output_path),
-        "--color-mode", color_mode,
-        "--hierarchical", "stacked",
-    ]
+def trace(src: Path, out_svg: Path, tmp: Path, s: dict) -> None:
+    img = load(src, False).autorot()
+    biggest = int(s.get("max_size", 2048))
+    if max(img.width, img.height) > biggest:
+        img = img.resize(biggest / max(img.width, img.height), kernel="lanczos3")
+    if img.interpretation not in ("srgb", "b-w"):
+        img = img.colourspace("srgb")
+    if img.format != "uchar":
+        img = img.cast("uchar")
+    png = tmp / "trace-in.png"
+    img.pngsave(str(png))
+    opts = dict(PRESETS[s.get("trace_preset", "logo")])
+    if s.get("trace_mode") == "binary":
+        opts["colormode"] = "binary"
+    opts.setdefault("colormode", "color")
+    for k in ("filter_speckle", "color_precision", "layer_difference", "corner_threshold"):
+        if s.get(k) is not None:
+            opts[k] = int(s[k])
     try:
-        subprocess.run(args, check=True, capture_output=True, timeout=ctx.timeout_sec)
-    except subprocess.TimeoutExpired as exc:
-        raise EngineError(f"vtracer timed out: {exc}") from exc
-    except subprocess.CalledProcessError as exc:
-        raise EngineError(f"vtracer failed: {exc.stderr.decode(errors='replace')[:500]}") from exc
-    finally:
-        tmp_png.unlink(missing_ok=True)
-    progress(0.9)
-    return ctx.output_path
+        vtracer.convert_image_to_svg_py(str(png), str(out_svg), hierarchical="stacked", length_threshold=4.0,
+                                        max_iterations=10, splice_threshold=45, path_precision=6, **opts)
+    except Exception as e:
+        raise EngineError("convert_failed", "The image could not be traced.") from e
+    if not out_svg.exists() or out_svg.stat().st_size == 0:
+        raise EngineError("convert_failed", "Tracing produced an empty file.")

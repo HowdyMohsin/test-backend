@@ -1,0 +1,11 @@
+.env
+.env.local
+node_modules
+.next
+.venv
+__pycache__
+*.pyc
+api/data/jobs
+api/data/uploads
+api/data/samples/_generated
+secrets/

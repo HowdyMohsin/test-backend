@@ -1,37 +1,28 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { Loader2 } from "lucide-react";
+import type { ButtonHTMLAttributes } from "react";
 
-type Variant = "primary" | "secondary" | "ghost" | "danger";
-type Size = "sm" | "md" | "lg";
+type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: "primary" | "secondary" | "ghost" | "danger";
+  size?: "sm" | "md" | "lg";
+  loading?: boolean;
+};
 
-const variants: Record<Variant, string> = {
-  primary: "bg-primary text-primary-contrast hover:bg-primary-hover",
-  secondary: "bg-surface-raised text-text hover:bg-border border border-border",
-  ghost: "text-text-muted hover:text-text hover:bg-surface-raised",
+const variants = {
+  primary: "bg-primary text-primary-ink hover:bg-primary-hover shadow-sm",
+  secondary: "bg-surface text-ink border border-line hover:bg-surface-2",
+  ghost: "text-ink hover:bg-surface-2",
   danger: "bg-danger text-white hover:opacity-90",
 };
+const sizes = { sm: "h-8 px-3 text-sm", md: "h-10 px-4 text-sm", lg: "h-12 px-6 text-base" };
 
-const sizes: Record<Size, string> = {
-  sm: "px-3 py-1.5 text-sm",
-  md: "px-4 py-2 text-sm",
-  lg: "px-6 py-3 text-base",
-};
-
-export function Button({
-  variant = "primary",
-  size = "md",
-  className = "",
-  children,
-  ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: Variant;
-  size?: Size;
-  children: ReactNode;
-}) {
+export function Button({ variant = "primary", size = "md", loading, className = "", children, disabled, ...rest }: Props) {
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${sizes[size]} ${className}`}
-      {...props}
+      {...rest}
+      disabled={disabled || loading}
+      className={`inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${sizes[size]} ${className}`}
     >
+      {loading && <Loader2 className="size-4 animate-spin" aria-hidden />}
       {children}
     </button>
   );
