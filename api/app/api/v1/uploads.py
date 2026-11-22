@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, File, Request, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core import catalog, plan_guard
-from ...core.auth import Identity, get_identity
+from ...core.auth import Identity, get_identity, require_password_current, require_web_request
 from ...core.errors import ApiError
 from ...core.security import rate_limited, safe_stem
 from ...core.site import site_settings
@@ -32,6 +32,8 @@ def _compatible(sniffed: str, by_ext: str | None) -> bool:
 @router.post("/uploads")
 async def upload_file(request: Request, file: UploadFile = File(...), ident: Identity = Depends(get_identity),
                       db: AsyncSession = Depends(get_db)):
+    require_web_request(request)
+    require_password_current(ident)
     await ensure_active(db)
     s = get_settings()
     if rate_limited("up:" + ident.owner_key, s.upload_rate_per_minute):
@@ -89,9 +91,10 @@ async def upload_file(request: Request, file: UploadFile = File(...), ident: Ide
 
 
 @router.delete("/uploads/{upload_id}")
-async def delete_upload(upload_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def delete_upload(upload_id: uuid.UUID, request: Request, ident: Identity = Depends(get_identity), db: AsyncSession = Depends(get_db)):
+    require_web_request(request)
     up = await db.get(Upload, upload_id)
-    if up:
+    if up and up.owner_key == ident.owner_key:
         await db.delete(up)
         await db.commit()
         storage.remove(storage.upload_dir(upload_id))

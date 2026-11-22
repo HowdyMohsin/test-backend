@@ -11,7 +11,7 @@
 | 5 | Convert dabata hai | Progress bar, intezar ho to "2 ahead", Stop button |
 | 6 | Conversion poora | Download, bachat (-62%), Preview: original aur converted ka slider, "Download all (ZIP)" |
 | 7 | Limit poori (quota, badi file, zyada files, lambi video) | Tool ke andar peela notice: wajah + "Create a free account" / "See plans" ke buttons |
-| 8 | Account page (`/account`) | Sign in / Create account tabs. Sign in ke baad: plan, aaj ka usage, History aur Pricing ke links |
+| 8 | Account page (`/account`) | Email aur password se Sign in / Create account tabs. Sign in ke baad: plan, aaj ka usage, History, password change aur Pricing ke links |
 | 9 | Pricing page (`/pricing`) | Free, Basic, Pro. Basic/Pro par "Choose" dabao to neeche email wali waiting list (payment abhi OFF) |
 | 10 | History page (`/history`) | Pichhli conversions: file, converter, size, kab, status, Download (file 1 ghante tak) |
 | 11 | Pro user | Koi upsell nahi, koi ad nahi |

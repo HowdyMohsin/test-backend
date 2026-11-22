@@ -12,12 +12,6 @@ export class ApiError extends Error {
   }
 }
 
-type HeaderProvider = () => Promise<Record<string, string>>;
-let authHeaders: HeaderProvider = async () => ({});
-export function setAuthHeaderProvider(fn: HeaderProvider): void {
-  authHeaders = fn;
-}
-
 async function parseError(res: Response): Promise<ApiError> {
   try {
     const body = await res.json();
@@ -32,7 +26,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   try {
     res = await fetch(`${API_BASE}/v1${path}`, {
       ...init,
-      headers: { ...(init.body ? { "Content-Type": "application/json" } : {}), ...(await authHeaders()), ...init.headers },
+      credentials: "include",
+      headers: { "X-Requested-With": "qic-web", ...(init.body ? { "Content-Type": "application/json" } : {}), ...init.headers },
     });
   } catch {
     throw new ApiError("network", "Cannot reach the server. Check your connection and try again.", 0);
@@ -41,7 +36,14 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return (await res.json()) as T;
 }
 
+type Account = { email: string | null; plan: string; must_change_password: boolean };
+
 export const api = {
+  authMe: () => request<Account>("/auth/me"),
+  register: (email: string, password: string) => request<Account>("/auth/register", { method: "POST", body: JSON.stringify({ email, password }) }),
+  login: (email: string, password: string) => request<Account>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+  logout: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
+  changePassword: (currentPassword: string, newPassword: string) => request<{ ok: boolean }>("/auth/change-password", { method: "POST", body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }) }),
   formats: () => request<Catalog>("/formats"),
   plans: () => request<PlansResponse>("/plans"),
   me: () => request<Me>("/me"),
@@ -64,11 +66,11 @@ export function absolute(path: string): string {
 }
 
 export async function uploadFile(file: File, onProgress: (pct: number) => void, signal: AbortSignal): Promise<UploadResult> {
-  const headers = await authHeaders();
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${API_BASE}/v1/uploads`);
-    for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
+    xhr.withCredentials = true;
+    xhr.setRequestHeader("X-Requested-With", "qic-web");
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(Math.round((e.loaded / e.total) * 100));
     xhr.onload = () => {
       try {
@@ -81,7 +83,7 @@ export async function uploadFile(file: File, onProgress: (pct: number) => void, 
     };
     xhr.onerror = () => reject(new ApiError("network", "Cannot reach the server. Check your connection and try again.", 0));
     xhr.onabort = () => reject(new ApiError("aborted", "Upload cancelled.", 0));
-    signal.addEventListener("abort", () => xhr.abort());
+    signal.addEventListener("abort", () => xhr.abort(), { once: true });
     const form = new FormData();
     form.append("file", file, file.name);
     xhr.send(form);
@@ -91,7 +93,8 @@ export async function uploadFile(file: File, onProgress: (pct: number) => void, 
 export async function downloadZip(jobIds: string[], name: string): Promise<void> {
   const res = await fetch(`${API_BASE}/v1/jobs/zip`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+    credentials: "include",
+    headers: { "Content-Type": "application/json", "X-Requested-With": "qic-web" },
     body: JSON.stringify({ job_ids: jobIds, name }),
   });
   if (!res.ok) throw await parseError(res);

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core import plan_guard
-from ...core.auth import Identity, get_identity
+from ...core.auth import Identity, get_identity, require_password_current, require_web_request
 from ...core.errors import ApiError
 from ...db.models import Job, Upload
 from ...db.session import get_db
@@ -27,10 +27,12 @@ class ConvertIn(BaseModel):
 
 
 @router.post("/convert")
-async def start_convert(body: ConvertIn, ident: Identity = Depends(get_identity), db: AsyncSession = Depends(get_db)):
+async def start_convert(body: ConvertIn, request: Request, ident: Identity = Depends(get_identity), db: AsyncSession = Depends(get_db)):
+    require_web_request(request)
+    require_password_current(ident)
     await ensure_active(db)
     upload = await db.get(Upload, body.upload_id)
-    if upload is None:
+    if upload is None or upload.owner_key != ident.owner_key:
         raise ApiError("upload_expired", "The uploaded file has expired. Please upload it again.", 404)
     pair = registry.pair_for(upload.detected_format, body.to)
     if pair is None:

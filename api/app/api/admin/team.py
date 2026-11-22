@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...core.auth import validate_password
 from ...core.errors import ApiError
 from ...db.models import AdminUser
 from ...db.session import get_db
@@ -29,7 +30,7 @@ async def list_team(db: AsyncSession = Depends(get_db)):
 
 class NewMember(BaseModel):
     email: str = Field(pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", max_length=320)
-    password: str = Field(min_length=10, max_length=200)
+    password: str = Field(min_length=12, max_length=200)
     role: str = "staff"
     tabs: list[str] = []
 
@@ -37,6 +38,7 @@ class NewMember(BaseModel):
 @router.post("")
 async def add_member(body: NewMember, admin: AdminUser = Depends(super_only()), db: AsyncSession = Depends(get_db)):
     email = body.email.lower()
+    validate_password(body.password)
     if (await db.execute(select(AdminUser).where(AdminUser.email == email))).scalar_one_or_none():
         raise ApiError("exists", "This email is already on the team.", 409)
     if body.role not in ("super_admin", "staff") or set(body.tabs) - set(TABS):
@@ -52,7 +54,7 @@ class MemberPatch(BaseModel):
     role: str | None = None
     tabs: list[str] | None = None
     active: bool | None = None
-    new_password: str | None = Field(default=None, min_length=10, max_length=200)
+    new_password: str | None = Field(default=None, min_length=12, max_length=200)
 
 
 async def _super_count(db: AsyncSession) -> int:
@@ -77,6 +79,7 @@ async def patch_member(member_id: uuid.UUID, body: MemberPatch, admin: AdminUser
     if body.active is not None:
         m.active = body.active
     if body.new_password:
+        validate_password(body.new_password)
         m.password_hash, m.must_change_password = _ph.hash(body.new_password), True
     await audit(db, admin, "team.update", m.email, before, row(m))
     await db.commit()

@@ -33,9 +33,9 @@ export default function TeamPage() {
       <Card title="Add a team member" className="mb-6">
         <div className="grid gap-3 md:grid-cols-4">
           <Input type="email" placeholder="Email" aria-label="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          <Input type="password" placeholder="Temporary password (10+ characters)" aria-label="Temporary password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <Input type="password" minLength={12} placeholder="Temporary password (12+ characters)" aria-label="Temporary password" value={password} onChange={(e) => setPassword(e.target.value)} />
           <Select aria-label="Role" value={role} onChange={(e) => setRole(e.target.value)}><option value="staff">Staff</option><option value="super_admin">Super admin</option></Select>
-          <Button disabled={!email || password.length < 10} onClick={() => act(async () => { await adminApi.post("/team", { email, password, role, tabs }); setEmail(""); setPassword(""); setTabs([]); }, "Member added. They must change the password at first sign in.")}>Add member</Button>
+          <Button disabled={!email || password.length < 12} onClick={() => act(async () => { await adminApi.post("/team", { email, password, role, tabs }); setEmail(""); setPassword(""); setTabs([]); }, "Member added. They must change the password at first sign in.")}>Add member</Button>
         </div>
         {role === "staff" && <div className="mt-3"><p className="mb-1 text-sm font-medium">Sections they can open</p><Tabs all={data.tabs} value={tabs} onChange={setTabs} /></div>}
       </Card>
@@ -47,7 +47,7 @@ export default function TeamPage() {
               <div className="flex flex-wrap items-center gap-3">
                 <Select className="h-9 w-36" aria-label={`Role of ${m.email}`} value={m.role} onChange={(e) => act(() => adminApi.patch(`/team/${m.id}`, { role: e.target.value }), "Role changed.")}><option value="staff">Staff</option><option value="super_admin">Super admin</option></Select>
                 <label className="flex items-center gap-2 text-sm">Active <Switch checked={m.active} onChange={(v) => act(() => adminApi.patch(`/team/${m.id}`, { active: v }), v ? "Enabled." : "Disabled.")} label={`${m.email} active`} /></label>
-                <Button size="sm" variant="ghost" onClick={() => { const p = window.prompt("New temporary password (10+ characters)"); if (p && p.length >= 10) act(() => adminApi.patch(`/team/${m.id}`, { new_password: p }), "Password reset."); }}>Reset password</Button>
+                <Button size="sm" variant="ghost" onClick={() => { const p = window.prompt("New temporary password (12+ characters, three character types)"); if (p && p.length >= 12) act(() => adminApi.patch(`/team/${m.id}`, { new_password: p }), "Password reset."); }}>Reset password</Button>
                 <Button size="sm" variant="ghost" onClick={() => setDel(m)}>Remove</Button>
               </div>
             </div>

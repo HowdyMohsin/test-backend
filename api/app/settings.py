@@ -10,7 +10,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    env: str = "dev"  # dev | prod. Dev enables the X-Dev-User login shortcut.
+    env: str = "dev"  # dev | prod
     role: str = "both"  # api | worker | both
     database_url: str = "postgresql+asyncpg://qic:qic@localhost:5432/qic"
     secret_key: str = "change-me-in-real-use"
@@ -20,8 +20,7 @@ class Settings(BaseSettings):
     retention_minutes: int = 60
     workers: int = 4
     trust_proxy: bool = False  # honour X-Forwarded-For (only behind a proxy you control)
-    firebase_project_id: str = ""
-    firebase_credentials_path: str = ""
+    user_session_days: int = 30
     max_pixels: int = 100_000_000
     max_pdf_pages: int = 50
     upload_rate_per_minute: int = 60

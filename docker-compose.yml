@@ -28,11 +28,11 @@ services:
       SECRET_KEY: ${SECRET_KEY:-dev-only-change-me}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001}
       SAMPLES_DIR: /samples
-      DEFAULT_ADMIN_EMAIL: ${DEFAULT_ADMIN_EMAIL:-admin@gmail.com}
-      DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD:-admin}
+      # Optional and only honoured in ENV=dev. Prefer `app.cli create-admin`.
+      DEFAULT_ADMIN_EMAIL: ${DEFAULT_ADMIN_EMAIL:-}
+      DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD:-}
       RETENTION_MINUTES: ${RETENTION_MINUTES:-60}
-      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
-      FIREBASE_CREDENTIALS_PATH: ${FIREBASE_CREDENTIALS_PATH:-}
+      USER_SESSION_DAYS: ${USER_SESSION_DAYS:-30}
     ports:
       - "8000:8000"
     volumes:

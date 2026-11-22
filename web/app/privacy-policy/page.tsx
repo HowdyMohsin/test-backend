@@ -15,12 +15,12 @@ export default function Privacy() {
         </>) },
         { title: "What we keep", body: (<ul className="list-disc space-y-1.5 pl-5">
           <li>A one-way scrambled version of your IP address, used only to count daily conversions for visitors without an account. We do not store the readable address in our database.</li>
-          <li>If you create an account: your email address, handled by our sign-in provider, Google Firebase.</li>
+          <li>If you create an account: your email address, password hash and account plan. Passwords are protected with one-way Argon2 hashing; we cannot read your password.</li>
+          <li>A secure, HttpOnly session cookie that keeps you signed in. You can end it by signing out, and password changes end other sessions.</li>
           <li>Simple statistics about each conversion: which formats, how large, how long it took, and whether it worked. These never include the content of your files.</li>
           <li>In your browser only: your theme and the last options you used, so the tool remembers them.</li>
         </ul>) },
         { title: "Other companies", body: (<ul className="list-disc space-y-1.5 pl-5">
-          <li>Google Firebase handles sign-in for accounts.</li>
           <li>If advertising is switched on, an ad network may place cookies in your browser. Pro members never see ads.</li>
           <li>Our hosting provider stores the files temporarily while they are processed.</li>
         </ul>) },

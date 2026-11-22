@@ -9,6 +9,8 @@ from pathlib import Path
 
 from sqlalchemy import select
 
+from .core.auth import normalize_email, password_hash, validate_password
+from .core.errors import ApiError
 from .db.models import AdminUser, AdSlot, FormatState, Message, Plan, Preset, SiteSetting
 from .db.session import SessionLocal
 from .formats import registry
@@ -18,9 +20,6 @@ SEED = Path(__file__).resolve().parents[1] / "seed"
 
 async def _default_admin(db) -> None:
     """Dev convenience: one admin so the panel opens right away. Never created outside ENV=dev."""
-    from argon2 import PasswordHasher
-
-    from .db.models import User
     from .settings import get_settings
 
     s = get_settings()
@@ -29,13 +28,14 @@ async def _default_admin(db) -> None:
     if s.env != "dev":
         print("DEFAULT_ADMIN_* is ignored because ENV is not dev. Use create-admin instead.")
         return
-    email = s.default_admin_email.strip().lower()
     if not (await db.execute(select(AdminUser))).first():
-        db.add(AdminUser(email=email, password_hash=PasswordHasher().hash(s.default_admin_password), role="super_admin", tabs=[]))
+        try:
+            email = normalize_email(s.default_admin_email)
+            validate_password(s.default_admin_password)
+        except ApiError as error:
+            raise RuntimeError(f"DEFAULT_ADMIN_* is not safe: {error.message}") from None
+        db.add(AdminUser(email=email, password_hash=password_hash(s.default_admin_password), role="super_admin", tabs=[]))
         print(f"Default admin created: {email}")
-    uid = f"dev:{email}"
-    if not (await db.execute(select(User).where(User.firebase_uid == uid))).scalar_one_or_none():
-        db.add(User(firebase_uid=uid, email=email, plan="pro"))  # the test login with this email gets Pro
 
 
 async def seed() -> None:
@@ -84,12 +84,16 @@ async def selfcheck(pairs: list[str] | None, concurrency: int) -> None:
 
 
 async def create_admin(email: str, password: str) -> None:
-    from argon2 import PasswordHasher
+    try:
+        email = normalize_email(email)
+        validate_password(password)
+    except ApiError as error:
+        raise RuntimeError(f"Admin account was not created: {error.message}") from None
     async with SessionLocal() as db:
         if (await db.execute(select(AdminUser).where(AdminUser.email == email))).scalar_one_or_none():
             print("That admin already exists.")
             return
-        db.add(AdminUser(email=email, password_hash=PasswordHasher().hash(password), role="super_admin", tabs=[]))
+        db.add(AdminUser(email=email, password_hash=password_hash(password), role="super_admin", tabs=[]))
         await db.commit()
     print(f"Super admin {email} created.")
 

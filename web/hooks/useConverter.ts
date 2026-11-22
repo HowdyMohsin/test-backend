@@ -68,7 +68,7 @@ export function useConverter(opts: { lockedFrom?: string; lockedTo?: string }) {
 
   const handleLimitError = useCallback(
     (err: ApiError): boolean => {
-      const reason: Record<string, string> = { quota_exceeded: "quota", file_too_large: "size", duration_limit: "duration", batch_too_large: "batch", plan_required: "plan", login_required: "login", maintenance: "info" };
+      const reason: Record<string, string> = { quota_exceeded: "quota", file_too_large: "size", duration_limit: "duration", batch_too_large: "batch", plan_required: "plan", login_required: "login", maintenance: "info", password_change_required: "account" };
       if (!reason[err.code]) return false;
       setNotice({ reason: reason[err.code], message: err.message });
       return true;
@@ -197,7 +197,7 @@ export function useConverter(opts: { lockedFrom?: string; lockedTo?: string }) {
         return "ok";
       } catch (e) {
         const err = e instanceof ApiError ? e : new ApiError("network", "Cannot reach the server.", 0);
-        if (["quota_exceeded", "batch_too_large", "plan_required", "login_required", "maintenance"].includes(err.code)) {
+        if (["quota_exceeded", "batch_too_large", "plan_required", "login_required", "maintenance", "password_change_required"].includes(err.code)) {
           patch(it.id, { stage: "ready" });
           handleLimitError(err);
           return "stop";

@@ -3,12 +3,13 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from argon2 import PasswordHasher
-from argon2.exceptions import VerifyMismatchError
+from argon2.exceptions import VerificationError
 from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...core.auth import validate_password
 from ...core.errors import ApiError
 from ...core.security import client_ip, rate_limited
 from ...db.models import AdminUser
@@ -26,8 +27,8 @@ class LoginIn(BaseModel):
 
 
 class PasswordIn(BaseModel):
-    current: str
-    new: str = Field(min_length=10, max_length=200)
+    current: str = Field(max_length=200)
+    new: str = Field(min_length=12, max_length=200)
 
 
 def profile(a: AdminUser) -> dict:
@@ -44,7 +45,7 @@ async def login(body: LoginIn, request: Request, response: Response, db: AsyncSe
         if admin is None or not admin.active:
             raise VerifyMismatchError
         _ph.verify(admin.password_hash, body.password)
-    except VerifyMismatchError:
+    except VerificationError:
         raise ApiError("bad_login", "Wrong email or password.", 401) from None
     admin.last_login_at = datetime.now(timezone.utc)
     await db.commit()
@@ -68,8 +69,9 @@ async def me(admin: AdminUser = Depends(get_admin)):
 async def change_password(body: PasswordIn, admin: AdminUser = Depends(get_admin), db: AsyncSession = Depends(get_db)):
     try:
         _ph.verify(admin.password_hash, body.current)
-    except VerifyMismatchError:
+    except VerificationError:
         raise ApiError("bad_login", "The current password is wrong.", 401) from None
+    validate_password(body.new)
     admin.password_hash = _ph.hash(body.new)
     admin.must_change_password = False
     await audit(db, admin, "password.change", admin.email)

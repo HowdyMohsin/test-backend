@@ -14,7 +14,7 @@ from pathlib import Path
 
 from sqlalchemy import text
 
-from ..db.models import Job, Upload
+from ..db.models import Job, Upload, UserSession
 from ..db.session import SessionLocal
 from ..formats import registry
 from ..settings import get_settings
@@ -188,6 +188,7 @@ async def requeue_stuck() -> None:
 async def janitor_once() -> None:
     async with SessionLocal() as db:
         ups = (await db.execute(text("delete from uploads where expires_at < now() returning id"))).all()
+        await db.execute(text("delete from user_sessions where expires_at < now()"))
         jobs = (await db.execute(text(
             "update jobs set status='expired', out_path=null where status in ('done','failed','cancelled') and expires_at < now() "
             "returning id"))).all()
